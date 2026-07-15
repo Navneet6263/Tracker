@@ -28,12 +28,17 @@ def summary(db: Session = Depends(get_db), _=Depends(require_admin)):
         ).all()
         score = compute_productivity_score(logs)
         active_secs = sum(l.duration_secs for l in logs)
+        
+        last_log = db.query(ActivityLog).filter(ActivityLog.employee_id == emp.id).order_by(ActivityLog.logged_at.desc()).first()
+        last_ping = last_log.logged_at.isoformat() if last_log else None
+
         result.append({
             "id": emp.id,
             "name": emp.name,
             "email": emp.email,
             "productivity_score": score,
             "active_hours": round(active_secs / 3600, 2),
+            "last_ping": last_ping
         })
     return result
 

@@ -74,9 +74,51 @@ def sync_loop():
 
         time.sleep(SYNC_INTERVAL)
 
+import sys
+import subprocess
+import os
+import psutil
+
+# ... (rest of imports are at top)
+
+def start_watchdog():
+    """Spawns the watchdog process to protect this tracker."""
+    main_pid = os.getpid()
+    main_exe_path = os.path.abspath(sys.argv[0])
+    
+    # Check if we were launched BY the watchdog
+    is_from_watchdog = "--from-watchdog" in sys.argv
+    if is_from_watchdog:
+        print("Started by watchdog. Not spawning a new one yet.")
+        # Optionally, we could monitor the watchdog here, but if the watchdog dies, 
+        # it's usually because the user killed it. We can just spawn a new one.
+        pass
+
+    try:
+        # Determine if we are running as an exe or script
+        if main_exe_path.endswith('.py'):
+            watchdog_path = os.path.join(os.path.dirname(main_exe_path), 'watchdog.py')
+            subprocess.Popen([sys.executable, watchdog_path, str(main_pid), main_exe_path],
+                             creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        else:
+            # When compiled, we should probably compile watchdog as a separate exe, 
+            # or use multiprocessing to spawn a separate process. For simplicity, 
+            # we assume watchdog.exe is in the same directory.
+            watchdog_path = os.path.join(os.path.dirname(main_exe_path), 'watchdog.exe')
+            if os.path.exists(watchdog_path):
+                subprocess.Popen([watchdog_path, str(main_pid), main_exe_path],
+                                 creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
+        print("Watchdog spawned successfully.")
+    except Exception as e:
+        print(f"Failed to spawn watchdog: {e}")
+
 def main():
     init_db()
     start_tracking()
+    
+    # Spawn the watchdog to protect this process
+    start_watchdog()
+
     threading.Thread(target=screenshot_loop, daemon=True).start()
     threading.Thread(target=sync_loop, daemon=True).start()
 
@@ -90,11 +132,11 @@ def main():
         d.ellipse([16, 16, 48, 48], fill=(0, 200, 100))
         return img
 
+    # Create the icon WITHOUT a menu, so they can't quit!
     icon = pystray.Icon(
         "Tracker",
         make_icon(),
-        "Employee Tracker",
-        menu=pystray.Menu(pystray.MenuItem("Quit", lambda: icon.stop()))
+        "Employee Tracker (Active)"
     )
     icon.run()
 

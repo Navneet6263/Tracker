@@ -122,9 +122,23 @@ export default function AdminDashboard() {
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-slow"></span>
                             Active
                           </span>
-                        ) : (
-                          <span className="text-slate-500">Offline</span>
-                        )}
+                        ) : (() => {
+                          // Tamper detection: if they have active hours today but haven't pinged in >15 minutes
+                          if (emp.active_hours > 0 && emp.last_ping) {
+                            const lastPingDate = new Date(emp.last_ping);
+                            const now = new Date();
+                            const diffMins = (now - lastPingDate) / 1000 / 60;
+                            // Between 15 mins and 12 hours (to ignore next day resets)
+                            if (diffMins > 15 && diffMins < 720) {
+                              return (
+                                <span className="flex items-center gap-1 text-red-500 font-bold animate-pulse" title={`Last ping was ${Math.round(diffMins)} mins ago!`}>
+                                  ⚠️ OFFLINE (Tampered?)
+                                </span>
+                              );
+                            }
+                          }
+                          return <span className="text-slate-500">Offline</span>;
+                        })()}
                       </td>
                     </tr>
                   );
