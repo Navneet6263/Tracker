@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 SERVER_URL = os.getenv("TRACKER_SERVER", "http://localhost:8000")
-EMPLOYEE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWh1bEBjb21wYW55LmNvbSIsInJvbGUiOiJlbXBsb3llZSIsImlkIjoyLCJleHAiOjE3ODQwNTg2NDl9.RE-_0K1QmDDJVn9WDTTIyyAer5iuGE1niVg2qDY-unE"
+EMPLOYEE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkB0cmFja2VyLmNvbSIsInJvbGUiOiJhZG1pbiIsImlkIjoxLCJleHAiOjE3ODQxNDgyNjl9.FiRm5g12kSGiynsBnKXZh-kyqWV5tT0pKBzvXizy-Y4"
 
 HEADERS = {"Authorization": f"Bearer {EMPLOYEE_TOKEN}"}
 
