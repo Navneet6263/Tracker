@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
-import type { Employee } from "@/data/mockData";
-import { getPingStatus, getLiveInput, formatPing } from "@/hooks/useEmployeeStatus";
+import type { EmployeeSummary } from "@/lib/api";
+import { getPingStatus, formatPing, type LiveSignal } from "@/hooks/useRealData";
 import { StatusPing } from "./StatusPing";
 import { ActivityIndicators } from "./ActivityIndicators";
 
@@ -18,7 +18,8 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
-export function EmployeeTable({ employees }: { employees: Employee[] }) {
+interface Props { employees: EmployeeSummary[]; liveSignals?: Record<number, LiveSignal> }
+export function EmployeeTable({ employees, liveSignals = {} }: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -45,6 +46,14 @@ export function EmployeeTable({ employees }: { employees: Employee[] }) {
           <tbody>
             {employees.map((e) => {
               const status = getPingStatus(e.active_hours, e.last_ping);
+              const live = liveSignals[e.id];
+              const liveInput = live?.inputs ? {
+                is_keyboard_active: live.inputs.keyboard,
+                is_mouse_active: live.inputs.mouse,
+                win_r_count: live.inputs.win_r_count,
+              } : undefined;
+              // Avatar initials from name
+              const initials = e.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
               return (
                 <tr
                   key={e.id}
@@ -53,22 +62,22 @@ export function EmployeeTable({ employees }: { employees: Employee[] }) {
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 text-xs font-semibold text-white">
-                        {e.avatar}
+                        {initials}
                       </div>
                       <div>
                         <p className="font-medium text-slate-900">{e.name}</p>
-                        <p className="text-xs text-slate-500">{e.role}</p>
+                        <p className="text-xs text-slate-500">{e.email}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-5 py-3"><ScoreBar score={e.productivity_score} /></td>
                   <td className="px-5 py-3 tabular-nums text-slate-700">{e.active_hours.toFixed(1)}h</td>
-                  <td className="px-5 py-3"><ActivityIndicators input={getLiveInput(e.id)} /></td>
+                  <td className="px-5 py-3"><ActivityIndicators input={liveInput} /></td>
                   <td className="px-5 py-3"><StatusPing status={status} label={formatPing(e.last_ping)} /></td>
                   <td className="px-5 py-3 text-right">
                     <Link
                       to="/employees/$id"
-                      params={{ id: e.id }}
+                      params={{ id: String(e.id) }}
                       className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-indigo-600 opacity-0 transition group-hover:opacity-100 hover:bg-indigo-50"
                     >
                       View <ChevronRight className="h-3 w-3" />

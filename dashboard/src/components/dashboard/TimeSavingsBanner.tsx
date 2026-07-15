@@ -1,20 +1,17 @@
 import { TrendingDown, Clock4 } from "lucide-react";
-import { employees, appUsage } from "@/data/mockData";
+import type { EmployeeSummary } from "@/lib/api";
 
-// Calculates total distraction minutes across all employees
-function getTotalDistractionMins(): number {
-  return employees.reduce((total, emp) => {
-    const usage = appUsage[emp.id] ?? [];
-    return total + usage
-      .filter((u) => u.category === "distraction")
-      .reduce((a, u) => a + u.minutes, 0);
-  }, 0);
-}
+interface Props { employees: EmployeeSummary[] }
 
-export function TimeSavingsBanner() {
-  const distractionMins = getTotalDistractionMins();
-  const distractionHours = (distractionMins / 60).toFixed(1);
-  const potentialSavingHours = (distractionMins * 0.7 / 60).toFixed(1); // 70% recoverable
+// Estimate distraction hours from productivity score:
+// If productivity_score = 80%, then 20% of active time was distraction
+export function TimeSavingsBanner({ employees }: Props) {
+  const totalActiveHours = employees.reduce((a, e) => a + e.active_hours, 0);
+  const avgProductivity = employees.length
+    ? employees.reduce((a, e) => a + e.productivity_score, 0) / employees.length / 100
+    : 0;
+  const distractionHours = (totalActiveHours * (1 - avgProductivity)).toFixed(1);
+  const potentialSavingHours = (totalActiveHours * (1 - avgProductivity) * 0.7).toFixed(1);
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 px-5 py-4">
