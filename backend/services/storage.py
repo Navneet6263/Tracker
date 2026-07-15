@@ -27,7 +27,8 @@ def upload_to_s3(file_bytes: bytes, employee_id: int) -> str:
         local_path = os.path.join("uploads", filename)
         with open(local_path, "wb") as f:
             f.write(file_bytes)
-        return f"http://localhost:8000/uploads/{filename}"
+        base_url = os.getenv("BACKEND_URL", "http://localhost:8000")
+        return f"{base_url}/uploads/{filename}"
 
 def get_presigned_url(s3_url: str, expires: int = 3600) -> str:
     if s3:
