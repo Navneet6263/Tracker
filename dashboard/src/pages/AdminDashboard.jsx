@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getSummary } from "../api/client";
+import { getSummary, API_URL } from "../api/client";
 import { useFetch } from "../hooks/useFetch";
 import { useAuth } from "../hooks/useAuth";
 import { StatCard, Card, Spinner } from "../components/UI";
@@ -20,7 +20,8 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const ws = new WebSocket(`ws://localhost:8000/ws/${user.id}`);
+    const wsBaseUrl = API_URL.replace(/^http/, "ws");
+    const ws = new WebSocket(`${wsBaseUrl}/ws/${user.id}`);
     
     ws.onmessage = (event) => {
       try {
