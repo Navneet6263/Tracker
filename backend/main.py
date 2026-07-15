@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import os
 from dotenv import load_dotenv
 from database import engine, Base
 from models import models  # Import models before create_all
