@@ -34,15 +34,20 @@ def screenshot_loop():
 
         if not is_system_idle(IDLE_THRESHOLD):
             title = get_active_window_title()
-            path = capture_screenshot()
-            
+            path = capture_screenshot(window_title=title)  # Blocked apps return None
+
+            if path is None:
+                # Window was blocked (banking/gallery etc.) - skip saving
+                time.sleep(SCREENSHOT_INTERVAL)
+                continue
+
             # Fetch input status
             inputs = get_and_reset_input_status()
-            
+
             save_screenshot(
-                path, title, 
-                inputs["keyboard_active"], 
-                inputs["mouse_active"], 
+                path, title,
+                inputs["keyboard_active"],
+                inputs["mouse_active"],
                 inputs["win_r_count"]
             )
 
