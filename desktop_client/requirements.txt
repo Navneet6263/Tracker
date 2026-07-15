@@ -1,0 +1,11 @@
+pyautogui
+psutil
+pillow
+requests
+pynput
+pywin32
+pystray
+sqlalchemy
+aiohttp
+cryptography
+pyinstaller

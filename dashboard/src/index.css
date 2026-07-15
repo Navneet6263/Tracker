@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-white antialiased selection:bg-brand selection:text-white;
+    font-family: 'Inter', system-ui, sans-serif;
+    /* Soft grid pattern for premium tech feel */
+    background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, transparent 60%),
+                      linear-gradient(to right, #1e293b 1px, transparent 1px),
+                      linear-gradient(to bottom, #1e293b 1px, transparent 1px);
+    background-size: 100% 100%, 40px 40px, 40px 40px;
+    background-color: #0b1120;
+    background-attachment: fixed;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
