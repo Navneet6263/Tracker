@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Camera, Loader2, CheckCircle2 } from "lucide-react";
+import { requestScreenshot, fetchScreenshots } from "@/lib/api";
 
 interface Props { employeeId: string; employeeName: string }
 
@@ -9,15 +10,41 @@ export function OnDemandScreenshot({ employeeId, employeeName }: Props) {
   const [state, setState] = useState<State>("idle");
   const [shotUrl, setShotUrl] = useState<string | null>(null);
 
-  const requestScreenshot = async () => {
+  const pollForNewScreenshot = async (oldLatestId?: number, retries = 10) => {
+    if (retries === 0) {
+      setState("error");
+      return;
+    }
+    
+    try {
+      const shots = await fetchScreenshots(Number(employeeId));
+      if (shots.length > 0) {
+        const latest = shots[0];
+        if (!oldLatestId || latest.id !== oldLatestId) {
+          setShotUrl(latest.url);
+          setState("done");
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Wait 2 seconds and poll again
+    setTimeout(() => pollForNewScreenshot(oldLatestId, retries - 1), 2000);
+  };
+
+  const requestSnapshot = async () => {
     setState("requesting");
     try {
-      // TODO: Replace with real API call -> POST /screenshots/request/{employeeId}
-      // Simulating a 2-second wait for the employee's tracker to respond
-      await new Promise((r) => setTimeout(r, 2000));
-      // Mock response: in production this will be the real screenshot URL from backend
-      setShotUrl(`https://picsum.photos/seed/${employeeId}live/800/450`);
-      setState("done");
+      // Get current latest screenshot ID so we know when a new one arrives
+      const initialShots = await fetchScreenshots(Number(employeeId));
+      const oldLatestId = initialShots.length > 0 ? initialShots[0].id : undefined;
+
+      await requestScreenshot(Number(employeeId));
+      
+      // Start polling for the new one (up to 20 seconds wait)
+      pollForNewScreenshot(oldLatestId, 10);
     } catch {
       setState("error");
     }
@@ -31,7 +58,7 @@ export function OnDemandScreenshot({ employeeId, employeeName }: Props) {
           <p className="text-xs text-slate-400 mt-0.5">See what {employeeName.split(" ")[0]} is doing right now</p>
         </div>
         <button
-          onClick={requestScreenshot}
+          onClick={requestSnapshot}
           disabled={state === "requesting"}
           className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
         >

@@ -1,4 +1,4 @@
-import type { PingStatus } from "@/hooks/useEmployeeStatus";
+import type { PingStatus } from "@/hooks/useRealData";
 
 interface Props {
   status: PingStatus;

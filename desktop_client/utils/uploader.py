@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 SERVER_URL = os.getenv("TRACKER_SERVER", "http://localhost:8000")
-EMPLOYEE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbkB0cmFja2VyLmNvbSIsInJvbGUiOiJhZG1pbiIsImlkIjoxLCJleHAiOjE3ODQxNDgyNjl9.FiRm5g12kSGiynsBnKXZh-kyqWV5tT0pKBzvXizy-Y4"
+EMPLOYEE_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJyYWh1bEBjb21wYW55LmNvbSIsInJvbGUiOiJlbXBsb3llZSIsImlkIjoyLCJleHAiOjE3ODQyMTE3MTJ9.duS2dHWWnF3YH5g4r_HDdF3i9TwoOkNKid_jYD_K3Nc"
 
 HEADERS = {"Authorization": f"Bearer {EMPLOYEE_TOKEN}"}
 
@@ -48,8 +48,11 @@ def upload_event(event_type: str, payload: dict, timestamp: str) -> bool:
     except Exception:
         return False
 
-def ping_online():
+def ping_online() -> str:
     try:
-        requests.post(f"{SERVER_URL}/events/ping", headers=HEADERS, timeout=5)
+        r = requests.post(f"{SERVER_URL}/events/ping", headers=HEADERS, timeout=5)
+        if r.status_code == 200:
+            return r.json().get("command")
     except Exception:
         pass
+    return None

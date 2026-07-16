@@ -1,5 +1,8 @@
 import time
 import threading
+import sys
+import os
+import socket
 from utils.local_db import (
     init_db, save_screenshot, save_event,
     get_pending_screenshots, get_pending_events,
@@ -9,6 +12,23 @@ from utils.uploader import is_online, upload_screenshot, upload_event, ping_onli
 from utils.screenshot import capture_screenshot
 from utils.win_utils import is_screen_locked, is_system_idle, get_active_window_title
 from utils.input_tracker import start_tracking, get_and_reset_input_status
+
+# ── Singleton lock: only ONE instance allowed ────────────────────────────────
+_LOCK_PORT = 47291
+_lock_socket = None
+
+def _acquire_singleton():
+    """Returns True if this is the only running instance."""
+    global _lock_socket
+    try:
+        _lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _lock_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+        _lock_socket.bind(("127.0.0.1", _LOCK_PORT))
+        _lock_socket.listen(1)
+        return True
+    except OSError:
+        print("[Tracker] Another instance is already running. Exiting.")
+        return False
 
 SCREENSHOT_INTERVAL = 15  # 15 seconds for testing
 SYNC_INTERVAL = 10
@@ -79,6 +99,22 @@ def sync_loop():
 
         time.sleep(SYNC_INTERVAL)
 
+def command_loop():
+    while True:
+        if is_online():
+            cmd = ping_online()
+            if cmd == "take_screenshot":
+                from datetime import datetime, timezone
+                title = get_active_window_title()
+                path = capture_screenshot(window_title=title)
+                if path:
+                    inputs = get_and_reset_input_status()
+                    ts = datetime.now(timezone.utc).isoformat()
+                    success = upload_screenshot(path, ts, title, inputs["keyboard_active"], inputs["mouse_active"], inputs["win_r_count"])
+                    if not success:
+                        save_screenshot(path, title, inputs["keyboard_active"], inputs["mouse_active"], inputs["win_r_count"])
+        time.sleep(3)
+
 import sys
 import subprocess
 import os
@@ -118,6 +154,10 @@ def start_watchdog():
         print(f"Failed to spawn watchdog: {e}")
 
 def main():
+    # Enforce single instance
+    if not _acquire_singleton():
+        sys.exit(0)
+
     init_db()
     start_tracking()
     
@@ -126,6 +166,7 @@ def main():
 
     threading.Thread(target=screenshot_loop, daemon=True).start()
     threading.Thread(target=sync_loop, daemon=True).start()
+    threading.Thread(target=command_loop, daemon=True).start()
 
     # System tray
     import pystray

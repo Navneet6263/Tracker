@@ -1,5 +1,5 @@
 import os
-from PIL import Image, ImageFilter
+from PIL import Image
 from pathlib import Path
 from datetime import datetime
 
@@ -14,8 +14,6 @@ BLOCKED_KEYWORDS = [
     "paytm", "gpay", "phonepe", "paypal", "credit card", "debit card",
     # Personal Photos / Gallery
     "photos", "gallery", "camera roll", "pictures",
-    # Personal messaging
-    "whatsapp", "telegram personal",
 ]
 
 def is_blocked_window(window_title: str) -> bool:
@@ -25,7 +23,7 @@ def is_blocked_window(window_title: str) -> bool:
 
 def capture_screenshot(window_title: str = "") -> str | None:
     """
-    Captures screenshot. Returns saved filepath, or None if window is blocked.
+    Captures a clear screenshot. Returns saved filepath, or None if window is blocked.
     Pass the current active window title so we can skip blocked apps.
     """
     if is_blocked_window(window_title):
@@ -34,8 +32,7 @@ def capture_screenshot(window_title: str = "") -> str | None:
 
     import pyautogui
     img = pyautogui.screenshot()
-    img = img.filter(ImageFilter.GaussianBlur(radius=3))
-
+    # Save as PNG - no blur, full clarity
     filename = SCREENSHOT_DIR / f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.png"
     img.save(filename, format="PNG")
     return str(filename)

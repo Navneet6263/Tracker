@@ -1,12 +1,12 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, Mail, Clock, Gauge, RefreshCw } from "lucide-react";
+import { ArrowLeft, Mail, Clock, Gauge, RefreshCw, Keyboard, Mouse } from "lucide-react";
 import { useState } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { StatusPing } from "@/components/dashboard/StatusPing";
-import { ActivityIndicators } from "@/components/dashboard/ActivityIndicators";
 import { ScreenshotGrid } from "@/components/dashboard/ScreenshotGrid";
-import { ActivityChart } from "@/components/dashboard/ActivityChart";
 import { OnDemandScreenshot } from "@/components/dashboard/OnDemandScreenshot";
+import { AppUsageDetail } from "@/components/dashboard/AppUsageDetail";
+import { OfflineTimeline } from "@/components/dashboard/OfflineTimeline";
 import { useEmployeeDetail, getPingStatus, formatPing } from "@/hooks/useRealData";
 import { fetchSummary, type EmployeeSummary } from "@/lib/api";
 
@@ -37,24 +37,20 @@ function EmployeeDetail() {
   const { analytics, screenshots, loading } = useEmployeeDetail(employee.id, period);
   const status = getPingStatus(employee.active_hours, employee.last_ping);
 
-  // Build initials avatar
   const initials = employee.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
 
-  // Build chart data from real app_breakdown
-  const chart = (analytics?.app_breakdown ?? []).slice(0, 7).map((item) => ({
-    day: item.app.slice(0, 10),
-    active: Math.round(item.secs / 3600 * 10) / 10,
-    idle: 0,
-  }));
-
-  // Map real screenshots to ScreenshotGrid format
   const shots = screenshots.map((s) => ({
     id: String(s.id),
     employee_id: String(employee.id),
-    url: s.s3_url,
+    url: s.url,
     window_title: s.window_title || "Unknown",
-    timestamp: s.taken_at,
+    timestamp: s.captured_at,
   }));
+
+  const kbMins = analytics?.keyboard_mins ?? 0;
+  const mouseMins = analytics?.mouse_mins ?? 0;
+  const breakdown = analytics?.app_breakdown ?? [];
+  const offlinePeriods = analytics?.offline_periods ?? [];
 
   return (
     <DashboardShell>
@@ -87,10 +83,11 @@ function EmployeeDetail() {
               <ActivityIndicators input={undefined} />
             </div>
           </div>
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <MiniStat icon={Gauge} label="Productivity" value={`${analytics?.productivity_score ?? employee.productivity_score}%`} />
             <MiniStat icon={Clock} label="Active Today" value={`${(analytics?.active_hours ?? employee.active_hours).toFixed(1)}h`} />
-            <MiniStat icon={Clock} label="Screenshots" value={shots.length} />
+            <MiniStat icon={Keyboard} label="Typing" value={`${Math.round(kbMins)}m`} />
+            <MiniStat icon={Mouse} label="Mouse Active" value={`${Math.round(mouseMins)}m`} />
           </div>
         </div>
 
@@ -112,10 +109,15 @@ function EmployeeDetail() {
           {loading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-400" />}
         </div>
 
-        {/* App breakdown chart */}
-        {chart.length > 0 && (
-          <ActivityChart data={chart} />
-        )}
+        {/* App Usage Breakdown */}
+        <AppUsageDetail
+          breakdown={breakdown}
+          keyboardMins={kbMins}
+          mouseMins={mouseMins}
+        />
+
+        {/* Offline / Locked Timeline */}
+        <OfflineTimeline periods={offlinePeriods} />
 
         {/* On-Demand Screenshot */}
         <OnDemandScreenshot employeeId={String(employee.id)} employeeName={employee.name} />

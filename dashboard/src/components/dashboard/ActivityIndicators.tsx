@@ -1,5 +1,10 @@
 import { Keyboard, Mouse, AlertTriangle } from "lucide-react";
-import type { LiveInput } from "@/data/mockData";
+
+export interface LiveInput {
+  is_keyboard_active: boolean;
+  is_mouse_active: boolean;
+  win_r_count: number;
+}
 
 export function ActivityIndicators({ input }: { input?: LiveInput }) {
   if (!input) return <span className="text-xs text-slate-400">—</span>;
