@@ -12,11 +12,18 @@ import { fetchSummary, type EmployeeSummary } from "@/lib/api";
 
 export const Route = createFileRoute("/employees/$id")({
   loader: async ({ params }) => {
-    // Load employee summary from real API
-    const allEmployees = await fetchSummary();
-    const employee = allEmployees.find((e) => String(e.id) === params.id);
-    if (!employee) throw notFound();
-    return { employee };
+    try {
+      const allEmployees = await fetchSummary();
+      const employee = allEmployees.find((e) => String(e.id) === params.id);
+      if (!employee) throw notFound();
+      return { employee };
+    } catch (err: any) {
+      if (err?.message?.includes("401")) {
+        window.location.replace("/login");
+        return { employee: null };
+      }
+      throw err;
+    }
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -80,7 +87,6 @@ function EmployeeDetail() {
             </div>
             <div className="flex flex-col items-end gap-2">
               <StatusPing status={status} label={formatPing(employee.last_ping)} />
-              <ActivityIndicators input={undefined} />
             </div>
           </div>
           <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
