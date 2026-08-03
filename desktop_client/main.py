@@ -111,13 +111,19 @@ def sync_loop():
         time.sleep(SYNC_INTERVAL)
 
 def command_loop():
+    global SCREENSHOT_INTERVAL
     while True:
         if not is_within_working_hours():
             time.sleep(60)
             continue
 
         if is_online():
-            cmd = ping_online()
+            resp = ping_online()
+            cmd = resp.get("command")
+            interval = resp.get("screenshot_interval")
+            if interval and isinstance(interval, int):
+                SCREENSHOT_INTERVAL = interval
+
             if cmd == "take_screenshot":
                 from datetime import datetime, timezone
                 title = get_active_window_title()

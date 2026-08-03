@@ -102,14 +102,14 @@ def upload_event(event_type: str, payload: dict, timestamp: str) -> bool:
     except Exception:
         return False
 
-def ping_online() -> str:
+def ping_online() -> dict:
     headers = get_headers()
     if not headers:
-        return None
+        return {}
     try:
         r = requests.post(f"{SERVER_URL}/events/ping", headers=headers, timeout=5)
         if r.status_code == 200:
-            return r.json().get("command")
+            return r.json()
     except Exception:
         pass
-    return None
+    return {}

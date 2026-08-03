@@ -63,7 +63,7 @@ async def ping(db: Session = Depends(get_db), user: Employee = Depends(get_curre
     })
     
     cmd = pending_commands.pop(user.id, None)
-    return {"status": "ok", "command": cmd}
+    return {"status": "ok", "command": cmd, "screenshot_interval": 900}
 
 @router.get("/{employee_id}")
 def get_events(employee_id: int, db: Session = Depends(get_db), user: Employee = Depends(get_current_user)):
