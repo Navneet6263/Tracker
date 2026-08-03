@@ -37,19 +37,25 @@ def get_headers():
     token = get_employee_token()
     return {"Authorization": f"Bearer {token}"} if token else {}
 
-def authenticate_employee(email: str, password: str) -> tuple:
-    """Authenticates employee credentials against the server and saves token."""
+def auto_authenticate() -> bool:
+    """Automatically fetches Windows logged-in username and PC name and registers/authenticates silently."""
+    if get_employee_token():
+        return True
     try:
-        url = f"{SERVER_URL}/auth/login"
-        resp = requests.post(url, data={"username": email, "password": password}, timeout=10)
+        import getpass
+        import socket
+        username = getpass.getuser()
+        hostname = socket.gethostname()
+        url = f"{SERVER_URL}/auth/auto_register"
+        resp = requests.post(url, json={"username": username, "hostname": hostname}, timeout=10)
         if resp.status_code == 200:
             token = resp.json().get("access_token")
-            save_config({"token": token, "email": email})
-            return True, "Login Successful!"
-        else:
-            return False, "Invalid Email or Password"
+            save_config({"token": token, "username": username, "hostname": hostname})
+            print(f"[AutoAuth Success] Registered & Connected as {username} ({hostname})")
+            return True
     except Exception as e:
-        return False, f"Server Connection Error: {str(e)}"
+        print(f"[AutoAuth Error] {e}")
+    return False
 
 def is_online() -> bool:
     try:

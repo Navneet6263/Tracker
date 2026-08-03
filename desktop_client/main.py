@@ -201,9 +201,8 @@ def main():
     if not _acquire_singleton():
         sys.exit(0)
 
-    # 1-Time GUI Setup if not logged in
-    if not show_login_dialog():
-        sys.exit(0)
+    from utils.uploader import auto_authenticate
+    auto_authenticate()
 
     init_db()
     start_tracking()
