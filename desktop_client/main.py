@@ -37,9 +37,19 @@ IDLE_THRESHOLD = 1800  # 30 mins
 _was_locked = False
 _was_offline = False
 
+def is_within_working_hours() -> bool:
+    """Returns True if current local time is between 9:30 AM and 6:30 PM."""
+    from datetime import datetime, time
+    now_time = datetime.now().time()
+    return time(9, 30) <= now_time <= time(18, 30)
+
 def screenshot_loop():
     global _was_locked
     while True:
+        if not is_within_working_hours():
+            time.sleep(60)
+            continue
+
         locked = is_screen_locked()
         if locked:
             if not _was_locked:
@@ -74,6 +84,10 @@ def screenshot_loop():
 def sync_loop():
     global _was_offline
     while True:
+        if not is_within_working_hours():
+            time.sleep(60)
+            continue
+
         if is_online():
             if _was_offline:
                 ping_online()
@@ -98,6 +112,10 @@ def sync_loop():
 
 def command_loop():
     while True:
+        if not is_within_working_hours():
+            time.sleep(60)
+            continue
+
         if is_online():
             cmd = ping_online()
             if cmd == "take_screenshot":

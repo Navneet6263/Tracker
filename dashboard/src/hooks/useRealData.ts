@@ -98,9 +98,15 @@ export function useLiveSignals(adminId: number | null) {
 // ─── Status helpers ───────────────────────────────────────────────────────────
 export type PingStatus = "active" | "idle" | "tamper";
 
+function parseUtcDate(dateStr: string | null): Date {
+  if (!dateStr) return new Date(0);
+  const normalized = dateStr.endsWith("Z") || dateStr.includes("+") ? dateStr : `${dateStr}Z`;
+  return new Date(normalized);
+}
+
 export function getPingStatus(active_hours: number, last_ping: string | null): PingStatus {
   if (!last_ping) return "idle";
-  const ageMin = (Date.now() - new Date(last_ping).getTime()) / 60_000;
+  const ageMin = (Date.now() - parseUtcDate(last_ping).getTime()) / 60_000;
   if (active_hours > 0 && ageMin > 15) return "tamper";
   if (ageMin > 5) return "idle";
   return "active";
@@ -108,8 +114,10 @@ export function getPingStatus(active_hours: number, last_ping: string | null): P
 
 export function formatPing(last_ping: string | null): string {
   if (!last_ping) return "never";
-  const ageMin = Math.round((Date.now() - new Date(last_ping).getTime()) / 60_000);
+  const ageMin = Math.round((Date.now() - parseUtcDate(last_ping).getTime()) / 60_000);
   if (ageMin < 1) return "just now";
   if (ageMin < 60) return `${ageMin}m ago`;
-  return `${Math.floor(ageMin / 60)}h ago`;
+  const hours = Math.floor(ageMin / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
