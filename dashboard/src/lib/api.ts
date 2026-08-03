@@ -73,11 +73,13 @@ export function getMe() {
 
 // WebSocket URL helper
 export function getWsUrl(path: string): string {
+  const cleanPath = path.startsWith('/ws') ? path : `/ws${path.startsWith('/') ? '' : '/'}${path}`;
   if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${window.location.host}/ws${path}`;
+    return `${protocol}//${window.location.host}${cleanPath}`;
   }
-  return BASE_URL.replace(/^http/, "ws") + path;
+  const cleanBaseUrl = BASE_URL.replace(/\/api\/?$/, "").replace(/^http/, "ws");
+  return `${cleanBaseUrl}${cleanPath}`;
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
