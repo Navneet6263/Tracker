@@ -4,7 +4,7 @@ from models.models import Employee, Base
 from services.auth import hash_password
 
 def ensure_default_admin():
-    """Ensures Admin@Greencall.com exists in DB with role='admin'."""
+    """Ensures Admin@Greencall.com exists in DB with role='admin' and correct password."""
     try:
         Base.metadata.create_all(bind=engine)
         db = SessionLocal()
@@ -20,10 +20,12 @@ def ensure_default_admin():
                     role="admin"
                 )
                 db.add(admin)
-                db.commit()
                 print(f"✅ Admin account created! Email: {admin_email} | Password: admin123")
             else:
-                print(f"✅ Admin account ({admin_email}) already exists.")
+                existing_admin.hashed_password = hash_password("admin123")
+                existing_admin.role = "admin"
+                print(f"✅ Admin account ({admin_email}) password updated to: admin123")
+        db.commit()
         db.close()
     except Exception as e:
         print(f"[Admin Seed Warning] {e}")
