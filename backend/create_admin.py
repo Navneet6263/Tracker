@@ -8,21 +8,22 @@ def ensure_default_admin():
     try:
         Base.metadata.create_all(bind=engine)
         db = SessionLocal()
-        admin_email = "Admin@Greencall.com"
-        existing_admin = db.query(Employee).filter(Employee.email == admin_email).first()
-
-        if not existing_admin:
-            admin = Employee(
-                name="Admin",
-                email=admin_email,
-                hashed_password=hash_password("admin123"),
-                role="admin"
-            )
-            db.add(admin)
-            db.commit()
-            print(f"\n✅ Admin account created! Email: {admin_email} | Password: admin123\n")
-        else:
-            print(f"\n✅ Admin account ({admin_email}) already exists.\n")
+        
+        emails_to_check = ["Admin@Greencall.com", "admin@greencall.com"]
+        for admin_email in emails_to_check:
+            existing_admin = db.query(Employee).filter(Employee.email == admin_email).first()
+            if not existing_admin:
+                admin = Employee(
+                    name="Admin",
+                    email=admin_email,
+                    hashed_password=hash_password("admin123"),
+                    role="admin"
+                )
+                db.add(admin)
+                db.commit()
+                print(f"✅ Admin account created! Email: {admin_email} | Password: admin123")
+            else:
+                print(f"✅ Admin account ({admin_email}) already exists.")
         db.close()
     except Exception as e:
         print(f"[Admin Seed Warning] {e}")
