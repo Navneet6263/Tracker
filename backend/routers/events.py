@@ -45,6 +45,13 @@ async def request_screenshot(employee_id: int, user: Employee = Depends(get_curr
     pending_commands[employee_id] = "take_screenshot"
     return {"status": "requested"}
 
+@router.post("/stop_client/{employee_id}")
+async def stop_client(employee_id: int, user: Employee = Depends(get_current_user)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403)
+    pending_commands[employee_id] = "stop_client"
+    return {"status": "stop_command_sent"}
+
 @router.post("/ping")
 async def ping(db: Session = Depends(get_db), user: Employee = Depends(get_current_user)):
     import json

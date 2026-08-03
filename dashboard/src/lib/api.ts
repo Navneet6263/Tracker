@@ -67,6 +67,10 @@ export function deleteScreenshot(screenshotId: number | string) {
   return apiFetch(`/screenshots/${screenshotId}`, { method: "DELETE" });
 }
 
+export function stopClient(employeeId: number | string) {
+  return apiFetch(`/events/stop_client/${employeeId}`, { method: "POST" });
+}
+
 export function fetchEvents(employeeId: number) {
   return apiFetch<EventItem[]>(`/events/${employeeId}`);
 }

@@ -124,6 +124,10 @@ def command_loop():
             if interval and isinstance(interval, int):
                 SCREENSHOT_INTERVAL = interval
 
+            if cmd == "stop_client":
+                print("[Tracker] Received Remote Stop Command from Admin. Exiting...")
+                os._exit(0)
+
             if cmd == "take_screenshot":
                 from datetime import datetime, timezone
                 title = get_active_window_title()
