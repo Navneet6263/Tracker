@@ -30,7 +30,7 @@ def _acquire_singleton():
         print("[Tracker] Another instance is already running. Exiting.")
         return False
 
-SCREENSHOT_INTERVAL = 15  # 15 seconds
+SCREENSHOT_INTERVAL = 900  # 15 minutes (900 seconds)
 SYNC_INTERVAL = 10
 IDLE_THRESHOLD = 1800  # 30 mins
 

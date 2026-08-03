@@ -139,7 +139,10 @@ function EmployeeDetail() {
               No screenshots yet for this employee.
             </div>
           ) : (
-            <ScreenshotGrid screenshots={shots} />
+            <ScreenshotGrid 
+              screenshots={shots} 
+              onDelete={(deletedId) => setShots((prev) => prev.filter((s) => s.id !== deletedId))}
+            />
           )}
         </div>
       </div>

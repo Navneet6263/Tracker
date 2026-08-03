@@ -82,3 +82,32 @@ def list_screenshots(
         }
         for s in shots
     ]
+
+@router.delete("/{screenshot_id}")
+def delete_screenshot(
+    screenshot_id: int,
+    db: Session = Depends(get_db),
+    user: Employee = Depends(get_current_user),
+):
+    if user.role != "admin":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin only")
+    shot = db.query(Screenshot).filter(Screenshot.id == screenshot_id).first()
+    if not shot:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+    
+    # Try deleting local file if exists
+    try:
+        import os
+        if shot.s3_url and "/uploads/" in shot.s3_url:
+            filename = shot.s3_url.split("/uploads/")[-1]
+            local_path = os.path.join("uploads", filename)
+            if os.path.exists(local_path):
+                os.remove(local_path)
+    except Exception:
+        pass
+
+    db.delete(shot)
+    db.commit()
+    return {"status": "deleted", "id": screenshot_id}
