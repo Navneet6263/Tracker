@@ -7,9 +7,11 @@ from models import models  # Import models before create_all
 from routers import auth, screenshots, events, analytics, ws
 
 from services.cleanup import start_automated_cleanup_daemon
+from create_admin import ensure_default_admin
 
 load_dotenv()
 Base.metadata.create_all(bind=engine)
+ensure_default_admin()
 start_automated_cleanup_daemon()
 
 app = FastAPI(title="Employee Tracker API", version="1.0.0")

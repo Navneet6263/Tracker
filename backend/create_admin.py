@@ -3,26 +3,29 @@ from database import SessionLocal, engine
 from models.models import Employee, Base
 from services.auth import hash_password
 
-Base.metadata.create_all(bind=engine)
+def ensure_default_admin():
+    """Ensures Admin@Greencall.com exists in DB with role='admin'."""
+    try:
+        Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+        admin_email = "Admin@Greencall.com"
+        existing_admin = db.query(Employee).filter(Employee.email == admin_email).first()
 
-db = SessionLocal()
-existing_admin = db.query(Employee).filter(Employee.email == "admin@tracker.com").first()
+        if not existing_admin:
+            admin = Employee(
+                name="Admin",
+                email=admin_email,
+                hashed_password=hash_password("admin123"),
+                role="admin"
+            )
+            db.add(admin)
+            db.commit()
+            print(f"\n✅ Admin account created! Email: {admin_email} | Password: admin123\n")
+        else:
+            print(f"\n✅ Admin account ({admin_email}) already exists.\n")
+        db.close()
+    except Exception as e:
+        print(f"[Admin Seed Warning] {e}")
 
-if not existing_admin:
-    admin = Employee(
-        name="Admin",
-        email="admin@tracker.com",
-        hashed_password=hash_password("password123"),
-        role="admin"
-    )
-    db.add(admin)
-    db.commit()
-    print("\n✅ Admin account successfully created!")
-    print("Email: admin@tracker.com")
-    print("Password: password123\n")
-else:
-    print("\n⚠️ Admin account already exists!")
-    print("Email: admin@tracker.com")
-    print("Password: password123\n")
-
-db.close()
+if __name__ == "__main__":
+    ensure_default_admin()
