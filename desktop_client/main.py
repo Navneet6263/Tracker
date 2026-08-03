@@ -8,7 +8,7 @@ from utils.local_db import (
     get_pending_screenshots, get_pending_events,
     mark_screenshot_uploaded, mark_event_uploaded
 )
-from utils.uploader import is_online, upload_screenshot, upload_event, ping_online, get_employee_token, authenticate_employee
+from utils.uploader import is_online, upload_screenshot, upload_event, ping_online, get_employee_token, auto_authenticate
 from utils.screenshot import capture_screenshot
 from utils.win_utils import is_screen_locked, is_system_idle, get_active_window_title
 from utils.input_tracker import start_tracking, get_and_reset_input_status
@@ -112,66 +112,7 @@ def command_loop():
                         save_screenshot(path, title, inputs["keyboard_active"], inputs["mouse_active"], inputs["win_r_count"])
         time.sleep(3)
 
-def show_login_dialog() -> bool:
-    """Shows a 1-time login setup window if employee is not logged in."""
-    if get_employee_token():
-        return True
 
-    import tkinter as tk
-    from tkinter import messagebox
-
-    root = tk.Tk()
-    root.title("Sentinel Employee Tracker Setup")
-    root.geometry("380x260")
-    root.resizable(False, False)
-    root.configure(bg="#1e293b")
-
-    # Center window
-    root.eval('tk::PlaceWindow . center')
-
-    tk.Label(root, text="Employee Monitoring Client Setup", font=("Segoe UI", 11, "bold"), bg="#1e293b", fg="#f8fafc").pack(pady=(15, 2))
-    tk.Label(root, text="Enter your employee credentials to activate tracking:", font=("Segoe UI", 8), bg="#1e293b", fg="#94a3b8").pack(pady=(0, 15))
-
-    frame = tk.Frame(root, bg="#1e293b")
-    frame.pack(padx=20)
-
-    tk.Label(frame, text="Email:", bg="#1e293b", fg="#cbd5e1", font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w", pady=6)
-    email_entry = tk.Entry(frame, width=28, font=("Segoe UI", 10))
-    email_entry.grid(row=0, column=1, pady=6)
-    email_entry.focus()
-
-    tk.Label(frame, text="Password:", bg="#1e293b", fg="#cbd5e1", font=("Segoe UI", 9)).grid(row=1, column=0, sticky="w", pady=6)
-    pass_entry = tk.Entry(frame, width=28, show="•", font=("Segoe UI", 10))
-    pass_entry.grid(row=1, column=1, pady=6)
-
-    status_label = tk.Label(root, text="", bg="#1e293b", fg="#ef4444", font=("Segoe UI", 8))
-    status_label.pack(pady=4)
-
-    success = [False]
-
-    def on_submit():
-        email = email_entry.get().strip()
-        password = pass_entry.get().strip()
-        if not email or not password:
-            status_label.config(text="Please enter email and password.", fg="#ef4444")
-            return
-
-        status_label.config(text="Connecting to server...", fg="#38bdf8")
-        root.update()
-
-        ok, msg = authenticate_employee(email, password)
-        if ok:
-            success[0] = True
-            messagebox.showinfo("Success", "Employee Tracker connected successfully!\nApp will run silently in background.")
-            root.destroy()
-        else:
-            status_label.config(text=msg, fg="#ef4444")
-
-    submit_btn = tk.Button(root, text="Connect & Start Tracking", command=on_submit, bg="#10b981", fg="#ffffff", font=("Segoe UI", 10, "bold"), activebackground="#059669", activeforeground="#ffffff", relief="flat", padx=10, pady=4)
-    submit_btn.pack(pady=8)
-
-    root.mainloop()
-    return success[0]
 
 def start_watchdog():
     """Spawns watchdog process."""
