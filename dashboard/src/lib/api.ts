@@ -1,7 +1,11 @@
 // Real API client - connects to the FastAPI backend
 // Set VITE_API_URL in your .env file for production (e.g. https://your-render-url.onrender.com)
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? `${window.location.origin}/api`
+    : "http://localhost:8000");
 
 function getToken(): string | null {
   return localStorage.getItem("token");
@@ -69,6 +73,10 @@ export function getMe() {
 
 // WebSocket URL helper
 export function getWsUrl(path: string): string {
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}/ws${path}`;
+  }
   return BASE_URL.replace(/^http/, "ws") + path;
 }
 
