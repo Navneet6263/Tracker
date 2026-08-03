@@ -1,12 +1,11 @@
 import ctypes
-import win32api
-import win32con
-import win32gui
 
 def is_screen_locked() -> bool:
     """Returns True if the Windows session is locked."""
     try:
-        hwnd = win32gui.FindWindow("Shell_TrayWnd", None)
+        user32 = ctypes.windll.user32
+        # LockWorkStation state check via GetForegroundWindow
+        hwnd = user32.GetForegroundWindow()
         return hwnd == 0
     except Exception:
         return False
@@ -19,12 +18,19 @@ def is_system_idle(idle_threshold_secs: int = 300) -> bool:
     lii = LASTINPUTINFO()
     lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
     ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii))
-    millis_idle = win32api.GetTickCount() - lii.dwTime
+    
+    # Use built-in Windows kernel32 GetTickCount64 (No external win32api DLL required)
+    uptime_ms = ctypes.windll.kernel32.GetTickCount64()
+    millis_idle = uptime_ms - lii.dwTime
     return millis_idle > idle_threshold_secs * 1000
 
 def get_active_window_title() -> str:
     try:
-        hwnd = win32gui.GetForegroundWindow()
-        return win32gui.GetWindowText(hwnd)
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        length = user32.GetWindowTextLengthW(hwnd)
+        buff = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, buff, length + 1)
+        return buff.value
     except Exception:
         return ""
