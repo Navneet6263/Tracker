@@ -8,7 +8,7 @@ from utils.local_db import (
     get_pending_screenshots, get_pending_events,
     mark_screenshot_uploaded, mark_event_uploaded
 )
-from utils.uploader import is_online, upload_screenshot, upload_event, ping_online
+from utils.uploader import is_online, upload_screenshot, upload_event, ping_online, get_employee_token, authenticate_employee
 from utils.screenshot import capture_screenshot
 from utils.win_utils import is_screen_locked, is_system_idle, get_active_window_title
 from utils.input_tracker import start_tracking, get_and_reset_input_status
@@ -30,7 +30,7 @@ def _acquire_singleton():
         print("[Tracker] Another instance is already running. Exiting.")
         return False
 
-SCREENSHOT_INTERVAL = 15  # 15 seconds for testing
+SCREENSHOT_INTERVAL = 15  # 15 seconds
 SYNC_INTERVAL = 10
 IDLE_THRESHOLD = 1800  # 30 mins
 
@@ -54,14 +54,12 @@ def screenshot_loop():
 
         if not is_system_idle(IDLE_THRESHOLD):
             title = get_active_window_title()
-            path = capture_screenshot(window_title=title)  # Blocked apps return None
+            path = capture_screenshot(window_title=title)
 
             if path is None:
-                # Window was blocked (banking/gallery etc.) - skip saving
                 time.sleep(SCREENSHOT_INTERVAL)
                 continue
 
-            # Fetch input status
             inputs = get_and_reset_input_status()
 
             save_screenshot(
@@ -83,7 +81,6 @@ def sync_loop():
                 _was_offline = False
 
             for row in get_pending_screenshots():
-                # Extract all 7 columns now
                 rid, fp, ts, wt, k_act, m_act, wr_c = row
                 if upload_screenshot(fp, ts, wt, bool(k_act), bool(m_act), wr_c):
                     mark_screenshot_uploaded(rid)
@@ -115,60 +112,107 @@ def command_loop():
                         save_screenshot(path, title, inputs["keyboard_active"], inputs["mouse_active"], inputs["win_r_count"])
         time.sleep(3)
 
-import sys
-import subprocess
-import os
-import psutil
+def show_login_dialog() -> bool:
+    """Shows a 1-time login setup window if employee is not logged in."""
+    if get_employee_token():
+        return True
 
-# ... (rest of imports are at top)
+    import tkinter as tk
+    from tkinter import messagebox
+
+    root = tk.Tk()
+    root.title("Sentinel Employee Tracker Setup")
+    root.geometry("380x260")
+    root.resizable(False, False)
+    root.configure(bg="#1e293b")
+
+    # Center window
+    root.eval('tk::PlaceWindow . center')
+
+    tk.Label(root, text="Employee Monitoring Client Setup", font=("Segoe UI", 11, "bold"), bg="#1e293b", fg="#f8fafc").pack(pady=(15, 2))
+    tk.Label(root, text="Enter your employee credentials to activate tracking:", font=("Segoe UI", 8), bg="#1e293b", fg="#94a3b8").pack(pady=(0, 15))
+
+    frame = tk.Frame(root, bg="#1e293b")
+    frame.pack(padx=20)
+
+    tk.Label(frame, text="Email:", bg="#1e293b", fg="#cbd5e1", font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w", pady=6)
+    email_entry = tk.Entry(frame, width=28, font=("Segoe UI", 10))
+    email_entry.grid(row=0, column=1, pady=6)
+    email_entry.focus()
+
+    tk.Label(frame, text="Password:", bg="#1e293b", fg="#cbd5e1", font=("Segoe UI", 9)).grid(row=1, column=0, sticky="w", pady=6)
+    pass_entry = tk.Entry(frame, width=28, show="•", font=("Segoe UI", 10))
+    pass_entry.grid(row=1, column=1, pady=6)
+
+    status_label = tk.Label(root, text="", bg="#1e293b", fg="#ef4444", font=("Segoe UI", 8))
+    status_label.pack(pady=4)
+
+    success = [False]
+
+    def on_submit():
+        email = email_entry.get().strip()
+        password = pass_entry.get().strip()
+        if not email or not password:
+            status_label.config(text="Please enter email and password.", fg="#ef4444")
+            return
+
+        status_label.config(text="Connecting to server...", fg="#38bdf8")
+        root.update()
+
+        ok, msg = authenticate_employee(email, password)
+        if ok:
+            success[0] = True
+            messagebox.showinfo("Success", "Employee Tracker connected successfully!\nApp will run silently in background.")
+            root.destroy()
+        else:
+            status_label.config(text=msg, fg="#ef4444")
+
+    submit_btn = tk.Button(root, text="Connect & Start Tracking", command=on_submit, bg="#10b981", fg="#ffffff", font=("Segoe UI", 10, "bold"), activebackground="#059669", activeforeground="#ffffff", relief="flat", padx=10, pady=4)
+    submit_btn.pack(pady=8)
+
+    root.mainloop()
+    return success[0]
 
 def start_watchdog():
-    """Spawns the watchdog process to protect this tracker."""
+    """Spawns watchdog process."""
     main_pid = os.getpid()
     main_exe_path = os.path.abspath(sys.argv[0])
     
-    # Check if we were launched BY the watchdog
     is_from_watchdog = "--from-watchdog" in sys.argv
     if is_from_watchdog:
-        print("Started by watchdog. Not spawning a new one yet.")
-        # Optionally, we could monitor the watchdog here, but if the watchdog dies, 
-        # it's usually because the user killed it. We can just spawn a new one.
-        pass
+        return
 
     try:
-        # Determine if we are running as an exe or script
         if main_exe_path.endswith('.py'):
             watchdog_path = os.path.join(os.path.dirname(main_exe_path), 'watchdog.py')
             subprocess.Popen([sys.executable, watchdog_path, str(main_pid), main_exe_path],
                              creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
         else:
-            # When compiled, we should probably compile watchdog as a separate exe, 
-            # or use multiprocessing to spawn a separate process. For simplicity, 
-            # we assume watchdog.exe is in the same directory.
             watchdog_path = os.path.join(os.path.dirname(main_exe_path), 'watchdog.exe')
             if os.path.exists(watchdog_path):
                 subprocess.Popen([watchdog_path, str(main_pid), main_exe_path],
                                  creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
-        print("Watchdog spawned successfully.")
     except Exception as e:
         print(f"Failed to spawn watchdog: {e}")
 
+import subprocess
+
 def main():
-    # Enforce single instance
     if not _acquire_singleton():
+        sys.exit(0)
+
+    # 1-Time GUI Setup if not logged in
+    if not show_login_dialog():
         sys.exit(0)
 
     init_db()
     start_tracking()
-    
-    # Spawn the watchdog to protect this process
     start_watchdog()
 
     threading.Thread(target=screenshot_loop, daemon=True).start()
     threading.Thread(target=sync_loop, daemon=True).start()
     threading.Thread(target=command_loop, daemon=True).start()
 
-    # System tray
     import pystray
     from PIL import Image, ImageDraw
 
@@ -178,7 +222,6 @@ def main():
         d.ellipse([16, 16, 48, 48], fill=(0, 200, 100))
         return img
 
-    # Create the icon WITHOUT a menu, so they can't quit!
     icon = pystray.Icon(
         "Tracker",
         make_icon(),
