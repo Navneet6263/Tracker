@@ -5,6 +5,7 @@ pyodbc
 pymssql
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt
 python-multipart
 boto3
 redis

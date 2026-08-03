@@ -8,7 +8,8 @@ from database import get_db
 from models.models import Employee
 import os
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_secret")
@@ -16,10 +17,17 @@ ALGORITHM = os.getenv("ALGORITHM", "HS256")
 EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 480))
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        pwd_bytes = plain.encode('utf-8')[:72]
+        hashed_bytes = hashed.encode('utf-8')
+        return bcrypt.checkpw(pwd_bytes, hashed_bytes)
+    except Exception:
+        return False
 
 def create_token(data: dict) -> str:
     payload = data.copy()
