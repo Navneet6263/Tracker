@@ -33,10 +33,22 @@ def summary(db: Session = Depends(get_db), _=Depends(require_admin)):
         score = compute_productivity_score(logs)
         active_secs = sum(l.duration_secs for l in logs)
 
+        last_ping_event = db.query(SystemEvent).filter(
+            SystemEvent.employee_id == emp.id
+        ).order_by(SystemEvent.occurred_at.desc()).first()
+
         last_log = db.query(ActivityLog).filter(
             ActivityLog.employee_id == emp.id
         ).order_by(ActivityLog.logged_at.desc()).first()
-        last_ping = last_log.logged_at.isoformat() if last_log else None
+
+        last_ping = None
+        if last_ping_event and last_log:
+            last_dt = max(last_ping_event.occurred_at, last_log.logged_at)
+            last_ping = last_dt.isoformat()
+        elif last_ping_event:
+            last_ping = last_ping_event.occurred_at.isoformat()
+        elif last_log:
+            last_ping = last_log.logged_at.isoformat()
 
         result.append({
             "id": emp.id,
