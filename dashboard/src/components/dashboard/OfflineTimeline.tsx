@@ -5,9 +5,16 @@ interface OfflinePeriod {
   reason: string;
 }
 
+function parseUtcDate(dateStr: string | null): Date {
+  if (!dateStr) return new Date(0);
+  const normalized = dateStr.endsWith("Z") || dateStr.includes("+") ? dateStr : `${dateStr}Z`;
+  return new Date(normalized);
+}
+
 function fmtDuration(fromStr: string, toStr: string) {
-  const diffMs = new Date(toStr).getTime() - new Date(fromStr).getTime();
+  const diffMs = parseUtcDate(toStr).getTime() - parseUtcDate(fromStr).getTime();
   const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "< 1m";
   if (mins < 60) return `${mins}m`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -15,7 +22,7 @@ function fmtDuration(fromStr: string, toStr: string) {
 }
 
 function fmtTime(isoStr: string) {
-  return new Date(isoStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return parseUtcDate(isoStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 interface Props { periods: OfflinePeriod[]; totalIdleMins?: number }
