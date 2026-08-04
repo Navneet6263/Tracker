@@ -89,7 +89,7 @@ def employee_analytics(
         if l.mouse_active:
             mouse_mins += l.duration_secs / 60
 
-    # Offline periods from system_events
+    # Offline & Screen Lock periods from system_events
     events = db.query(SystemEvent).filter(
         SystemEvent.employee_id == employee_id,
         SystemEvent.occurred_at >= since,
@@ -97,17 +97,39 @@ def employee_analytics(
     ).order_by(SystemEvent.occurred_at.asc()).all()
 
     offline_periods = []
-    offline_start = None
+
+    # 1. Screen lock pairing (screen_locked -> screen_unlocked)
+    lock_start = None
     for ev in events:
-        if ev.event_type in ("went_offline", "screen_locked") and offline_start is None:
-            offline_start = ev.occurred_at.isoformat()
-        elif ev.event_type in ("came_online", "screen_unlocked") and offline_start:
+        if ev.event_type == "screen_locked":
+            lock_start = ev.occurred_at.isoformat()
+        elif ev.event_type == "screen_unlocked" and lock_start:
             offline_periods.append({
-                "from": offline_start,
+                "from": lock_start,
                 "to": ev.occurred_at.isoformat(),
-                "reason": "screen_locked" if ev.event_type == "screen_unlocked" else "offline"
+                "reason": "screen_locked"
             })
-            offline_start = None
+            lock_start = None
+
+    if lock_start:
+        offline_periods.append({
+            "from": lock_start,
+            "to": _utcnow().isoformat(),
+            "reason": "screen_locked"
+        })
+
+    # 2. Offline pairing (went_offline -> came_online)
+    off_start = None
+    for ev in events:
+        if ev.event_type == "went_offline":
+            off_start = ev.occurred_at.isoformat()
+        elif ev.event_type == "came_online" and off_start:
+            offline_periods.append({
+                "from": off_start,
+                "to": ev.occurred_at.isoformat(),
+                "reason": "offline"
+            })
+            off_start = None
 
     total_secs = sum(l.duration_secs for l in logs)
     total_win_r = sum(l.win_r_count for l in logs if l.win_r_count)
