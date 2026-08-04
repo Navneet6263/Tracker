@@ -105,6 +105,8 @@ export interface EmployeeAnalytics {
   active_hours: number;
   keyboard_mins: number;
   mouse_mins: number;
+  win_r_count?: number;
+  total_idle_mins?: number;
   app_breakdown: { app: string; secs: number; hours: number }[];
   offline_periods: { from: string; to: string; reason: string }[];
 }

@@ -110,11 +110,24 @@ def employee_analytics(
             offline_start = None
 
     total_secs = sum(l.duration_secs for l in logs)
+    total_win_r = sum(l.win_r_count for l in logs if l.win_r_count)
+
+    total_idle_secs = 0
+    for p in offline_periods:
+        try:
+            from_dt = datetime.fromisoformat(p["from"])
+            to_dt = datetime.fromisoformat(p["to"])
+            total_idle_secs += max(0, (to_dt - from_dt).total_seconds())
+        except Exception:
+            pass
+
     return {
         "productivity_score": compute_productivity_score(logs),
         "active_hours": round(total_secs / 3600, 2),
         "keyboard_mins": round(keyboard_mins, 1),
         "mouse_mins": round(mouse_mins, 1),
+        "win_r_count": total_win_r,
+        "total_idle_mins": round(total_idle_secs / 60, 1),
         "app_breakdown": [
             {"app": k, "secs": v, "hours": round(v / 3600, 2)}
             for k, v in sorted(app_secs.items(), key=lambda x: -x[1])[:12]

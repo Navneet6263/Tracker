@@ -18,17 +18,32 @@ function fmtTime(isoStr: string) {
   return new Date(isoStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-interface Props { periods: OfflinePeriod[] }
+interface Props { periods: OfflinePeriod[]; totalIdleMins?: number }
 
-export function OfflineTimeline({ periods }: Props) {
+export function OfflineTimeline({ periods, totalIdleMins }: Props) {
   if (!periods || periods.length === 0) return null;
+
+  const calculatedMins = totalIdleMins ?? periods.reduce((sum, p) => {
+    const diff = new Date(p.to).getTime() - new Date(p.from).getTime();
+    return sum + Math.max(0, Math.round(diff / 60000));
+  }, 0);
+
+  const formattedTotal = calculatedMins < 60 ? `${calculatedMins}m` : `${Math.floor(calculatedMins / 60)}h ${Math.round(calculatedMins % 60)}m`;
 
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <h3 className="text-sm font-semibold text-slate-900 mb-1">Offline / Locked Periods</h3>
-      <p className="text-xs text-slate-500 mb-4">
-        Times when laptop was closed or screen was locked
-      </p>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">Offline / Locked Periods</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Times when laptop was closed or screen was locked
+          </p>
+        </div>
+        <div className="rounded-xl bg-amber-50 px-3 py-1.5 ring-1 ring-amber-200/70 text-right">
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-700 block">Total Idle Gap</span>
+          <span className="text-xs font-bold text-amber-900">{formattedTotal}</span>
+        </div>
+      </div>
       <div className="space-y-2">
         {periods.map((p, i) => {
           const isLocked = p.reason === "screen_locked";
