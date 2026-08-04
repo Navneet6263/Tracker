@@ -1,17 +1,28 @@
-import { TrendingDown, Clock4 } from "lucide-react";
+import { TrendingDown, Clock4, CheckCircle2 } from "lucide-react";
 import type { EmployeeSummary } from "@/lib/api";
 
 interface Props { employees: EmployeeSummary[] }
 
-// Estimate distraction hours from productivity score:
-// If productivity_score = 80%, then 20% of active time was distraction
 export function TimeSavingsBanner({ employees }: Props) {
   const totalActiveHours = employees.reduce((a, e) => a + e.active_hours, 0);
   const avgProductivity = employees.length
     ? employees.reduce((a, e) => a + e.productivity_score, 0) / employees.length / 100
-    : 0;
-  const distractionHours = (totalActiveHours * (1 - avgProductivity)).toFixed(1);
-  const potentialSavingHours = (totalActiveHours * (1 - avgProductivity) * 0.7).toFixed(1);
+    : 1;
+
+  const distractionHours = Math.max(0, Number((totalActiveHours * (1 - avgProductivity)).toFixed(1)));
+  const potentialSavingHours = Math.max(0, Number((totalActiveHours * (1 - avgProductivity) * 0.7).toFixed(1)));
+
+  if (totalActiveHours === 0 || distractionHours === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-5 py-3 text-sm text-indigo-900">
+        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        <div>
+          <p className="font-semibold text-slate-900">High Productivity Today</p>
+          <p className="text-xs text-slate-500">All active workstations are operating at optimal focus.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50 px-5 py-4">
@@ -21,20 +32,22 @@ export function TimeSavingsBanner({ employees }: Props) {
         </span>
         <div>
           <p className="text-sm font-semibold text-indigo-900">
-            Your team wasted <span className="text-rose-600">{distractionHours}h</span> on distractions today
+            Unfocused Time Detected: <span className="text-rose-600">{distractionHours}h</span> today
           </p>
           <p className="text-xs text-indigo-600/80">
-            YouTube, Instagram, Netflix and personal apps detected
+            Calculated from real-time activity and application focus tracking
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 shadow-sm ring-1 ring-indigo-100">
-        <Clock4 className="h-4 w-4 text-emerald-600" />
-        <div>
-          <p className="text-xs text-slate-500">You could save</p>
-          <p className="text-lg font-bold text-emerald-700 leading-tight">{potentialSavingHours}h / day</p>
+      {potentialSavingHours > 0 && (
+        <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 shadow-sm ring-1 ring-indigo-100">
+          <Clock4 className="h-4 w-4 text-emerald-600" />
+          <div>
+            <p className="text-xs text-slate-500">Potential Focus Gain</p>
+            <p className="text-lg font-bold text-emerald-700 leading-tight">+{potentialSavingHours}h / day</p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
