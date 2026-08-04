@@ -57,17 +57,19 @@ export function OfflineTimeline({ periods, totalIdleMins }: Props) {
                   {isLocked ? "🔒" : "📴"}
                 </span>
                 <div>
-                  <p className="text-xs font-medium text-slate-800">
-                    {isLocked ? "Screen Locked" : "Went Offline"}
+                  <p className="text-xs font-semibold text-slate-900">
+                    {isLocked ? "Win+L Screen Locked" : "System Offline"}
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    {fmtTime(p.from)} → {fmtTime(p.to)}
+                    Locked at <span className="font-medium text-slate-700">{fmtTime(p.from)}</span> → Unlocked at <span className="font-medium text-slate-700">{fmtTime(p.to)}</span>
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
-                {fmtDuration(p.from, p.to)}
-              </span>
+              <div className="text-right">
+                <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
+                  {fmtDuration(p.from, p.to)} Locked
+                </span>
+              </div>
             </div>
           );
         })}

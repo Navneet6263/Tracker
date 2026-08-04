@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Mail, Clock, Gauge, RefreshCw, Keyboard, Mouse, Terminal } from "lucide-react";
+import { ArrowLeft, Mail, Clock, Gauge, RefreshCw, Keyboard, Mouse, Terminal, Lock } from "lucide-react";
 import { useState, useEffect } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { StatusPing } from "@/components/dashboard/StatusPing";
@@ -131,12 +131,13 @@ function EmployeeDetailContent() {
             </div>
 
             {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
               <MiniStat icon={Gauge} label="Productivity" value={`${employee.productivity_score}%`} />
               <MiniStat icon={Clock} label="Active Today" value={`${employee.active_hours.toFixed(1)}h`} />
               <MiniStat icon={Keyboard} label="Typing" value={`${kbMins}m`} />
               <MiniStat icon={Mouse} label="Mouse Active" value={`${mouseMins}m`} />
               <MiniStat icon={Terminal} label="Win+R Launches" value={`${analytics?.win_r_count ?? 0}`} />
+              <MiniStat icon={Lock} label="Win+L Locks" value={`${offlinePeriods.filter(p => p.reason === 'screen_locked').length} times`} />
             </div>
           </div>
         </div>
