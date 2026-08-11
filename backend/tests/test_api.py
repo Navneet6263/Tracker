@@ -15,6 +15,8 @@ from fastapi.testclient import TestClient
 from database import Base, SessionLocal, engine
 from main import app
 from models.models import Employee, ShiftAssignment, WindowsIdentity
+from models.models import SystemEvent
+from routers.analytics import _normalize_page_title, _pair_gap_events
 from services.auth import hash_password
 
 
@@ -183,3 +185,38 @@ def test_privacy_first_api_flow():
 
     engine.dispose()
     TEST_DB.unlink(missing_ok=True)
+
+
+def test_report_noise_filter_and_lock_merging():
+    assert _normalize_page_title(
+        "msedge", "YouTube - Profile 1 - Microsoft Edge"
+    ) == "YouTube"
+    assert _normalize_page_title(
+        "msedge", "LinkedIn - Search and 1 more page - Profile 1 - Microsoft Edge"
+    ) == "LinkedIn - Search"
+    assert _normalize_page_title("explorer", "Program Manager") is None
+    assert _normalize_page_title("LockApp", "Windows Default Lock Screen") is None
+
+    start = datetime(2026, 8, 11, 11, 42, tzinfo=None)
+    events = [
+        SystemEvent(employee_id=1, event_type="screen_locked", occurred_at=start),
+        SystemEvent(
+            employee_id=1,
+            event_type="screen_unlocked",
+            occurred_at=start + timedelta(seconds=20),
+        ),
+        SystemEvent(
+            employee_id=1,
+            event_type="screen_locked",
+            occurred_at=start + timedelta(seconds=30),
+        ),
+        SystemEvent(
+            employee_id=1,
+            event_type="screen_unlocked",
+            occurred_at=start + timedelta(minutes=7),
+        ),
+    ]
+    periods = _pair_gap_events(events)
+    assert len(periods) == 1
+    assert periods[0]["from"] == start.isoformat()
+    assert periods[0]["to"] == (start + timedelta(minutes=7)).isoformat()

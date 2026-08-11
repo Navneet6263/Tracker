@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func
@@ -17,6 +18,64 @@ from services.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 WORK_STATES = ("active", "passive", "meeting")
+MIN_PAGE_SECONDS = 10
+GAP_MERGE_SECONDS = 60
+SYSTEM_PAGE_TITLES = {
+    "new tab",
+    "program manager",
+    "shortcut",
+    "system tray overflow window",
+    "system tray overflow window.",
+    "windows default lock screen",
+}
+APP_DISPLAY_NAMES = {
+    "msedge": "Microsoft Edge",
+    "chrome": "Google Chrome",
+    "firefox": "Mozilla Firefox",
+    "explorer": "File Explorer",
+}
+
+
+def _display_app_name(app_name: str | None) -> str:
+    raw_name = (app_name or "Unknown").strip()
+    return APP_DISPLAY_NAMES.get(raw_name.lower(), raw_name)
+
+
+def _normalize_page_title(app_name: str | None, title: str | None) -> str | None:
+    if not title:
+        return None
+    normalized = " ".join(title.split()).strip()
+    normalized = re.sub(
+        r"\s+-\s+Profile\s+\d+\s+-\s+Microsoft Edge$",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"\s+[-—]\s+(Microsoft Edge|Google Chrome|Mozilla Firefox)$",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    normalized = re.sub(
+        r"\s+and\s+\d+\s+more\s+pages?",
+        "",
+        normalized,
+        flags=re.IGNORECASE,
+    ).strip(" -")
+    if not normalized or normalized.casefold() in SYSTEM_PAGE_TITLES:
+        return None
+    if (app_name or "").strip().lower() == "lockapp":
+        return None
+    return normalized[:255]
+
+
+def _effective_state(state: str, app_name: str | None, title: str | None) -> str:
+    if (app_name or "").strip().lower() == "lockapp":
+        return "locked"
+    if (title or "").strip().casefold() == "windows default lock screen":
+        return "locked"
+    return state
 
 
 def _utcnow():
@@ -170,21 +229,27 @@ def employee_analytics(
     keyboard_events = 0
     mouse_events = 0
     for interval in intervals:
-        state_secs[interval.state] = state_secs.get(interval.state, 0) + interval.duration_secs
-        if interval.state in WORK_STATES:
+        effective_state = _effective_state(
+            interval.state, interval.app_name, interval.domain
+        )
+        state_secs[effective_state] = (
+            state_secs.get(effective_state, 0) + interval.duration_secs
+        )
+        if effective_state in WORK_STATES:
             work_secs += interval.duration_secs
-        if interval.category == "productive" and interval.state in WORK_STATES:
+        if interval.category == "productive" and effective_state in WORK_STATES:
             productive_secs += interval.duration_secs
         keyboard_secs += interval.keyboard_active_secs or 0
         mouse_secs += interval.mouse_active_secs or 0
         keyboard_events += interval.keyboard_events or 0
         mouse_events += interval.mouse_events or 0
-        if interval.state in WORK_STATES:
-            app = interval.app_name or "Unknown"
+        if effective_state in WORK_STATES:
+            app = _display_app_name(interval.app_name)
             key = (app, interval.category)
             app_secs[key] = app_secs.get(key, 0) + interval.duration_secs
-            if interval.domain:
-                page_key = (app, interval.domain)
+            page_title = _normalize_page_title(interval.app_name, interval.domain)
+            if page_title:
+                page_key = (app, page_title)
                 page_secs[page_key] = page_secs.get(page_key, 0) + interval.duration_secs
 
     events = (
@@ -230,8 +295,9 @@ def employee_analytics(
             {"app": app, "title": title, "secs": seconds}
             for (app, title), seconds in sorted(
                 page_secs.items(), key=lambda item: -item[1]
-            )[:30]
-        ],
+            )
+            if seconds >= MIN_PAGE_SECONDS
+        ][:30],
         "offline_periods": offline_periods,
     }
 
@@ -245,24 +311,57 @@ def _pair_gap_events(events: list[SystemEvent]) -> list[dict]:
     periods: list[dict] = []
     for event in events:
         if event.event_type in pairs:
-            open_events[event.event_type] = event.occurred_at
+            open_events.setdefault(event.event_type, event.occurred_at)
             continue
         for start_type, (end_type, reason) in pairs.items():
             if event.event_type == end_type and start_type in open_events:
                 periods.append(
                     {
-                        "from": open_events.pop(start_type).isoformat(),
-                        "to": event.occurred_at.isoformat(),
+                        "from": open_events.pop(start_type),
+                        "to": event.occurred_at,
                         "reason": reason,
                     }
                 )
-    now = _utcnow().isoformat()
+    now = _utcnow()
     for start_type, started_at in open_events.items():
         periods.append(
             {
-                "from": started_at.isoformat(),
+                "from": started_at,
                 "to": now,
                 "reason": pairs[start_type][1],
             }
         )
-    return sorted(periods, key=lambda row: row["from"])
+    return _merge_gap_periods(periods)
+
+
+def _merge_gap_periods(periods: list[dict]) -> list[dict]:
+    merged: list[dict] = []
+    for period in sorted(periods, key=lambda row: row["from"]):
+        if period["to"] <= period["from"]:
+            continue
+        if not merged:
+            merged.append(period.copy())
+            continue
+        previous = merged[-1]
+        gap_seconds = (period["from"] - previous["to"]).total_seconds()
+        overlaps = gap_seconds <= 0
+        same_reason_nearby = (
+            period["reason"] == previous["reason"]
+            and gap_seconds <= GAP_MERGE_SECONDS
+        )
+        if overlaps or same_reason_nearby:
+            previous["to"] = max(previous["to"], period["to"])
+            if period["reason"] == "screen_locked":
+                previous["reason"] = "screen_locked"
+        else:
+            merged.append(period.copy())
+
+    return [
+        {
+            "from": period["from"].isoformat(),
+            "to": period["to"].isoformat(),
+            "reason": period["reason"],
+        }
+        for period in merged
+        if (period["to"] - period["from"]).total_seconds() >= 10
+    ]

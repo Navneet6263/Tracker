@@ -82,15 +82,20 @@ async def ingest_activity(
         if ended_at > now + timedelta(minutes=5) or started_at < now - timedelta(days=14):
             raise HTTPException(status_code=422, detail="Activity timestamp is outside the accepted range")
 
+        normalized_state = sample.state
+        if (sample.app_name or "").strip().lower() == "lockapp" or (
+            sample.domain or ""
+        ).strip().casefold() == "windows default lock screen":
+            normalized_state = "locked"
         label = " ".join(filter(None, [sample.app_name, sample.domain]))
-        category = "productive" if sample.state == "meeting" else classify(label)
+        category = "productive" if normalized_state == "meeting" else classify(label)
         row = ActivityInterval(
             client_event_id=event_id,
             employee_id=user.id,
             session_id=sample.session_id,
             device_name=sample.device_name,
             windows_user=sample.windows_user,
-            state=sample.state,
+            state=normalized_state,
             app_name=sample.app_name,
             domain=sample.domain,
             category=category,

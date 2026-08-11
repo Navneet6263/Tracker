@@ -22,7 +22,9 @@ export function PageUsageTable({ breakdown }: { breakdown: PageItem[] }) {
         <AppWindow className="h-4 w-4 text-indigo-600" />
         <div>
           <h3 className="text-sm font-semibold text-slate-900">Pages and windows used</h3>
-          <p className="text-xs text-slate-500">Exact title and total time, without screenshots</p>
+          <p className="text-xs text-slate-500">
+            Meaningful pages grouped with total time, without screenshots
+          </p>
         </div>
       </div>
 
