@@ -47,6 +47,12 @@ python manage_users.py create-employee `
   --shift-name "Night" `
   --shift-start "19:00" `
   --shift-end "05:00"
+
+# Bind an employee that already exists in the database to a Windows profile:
+python manage_users.py assign-profile `
+  --email "rahul@company.com" `
+  --hostname "PC-101" `
+  --username "rahul"
 ```
 
 The agent fetches the pre-created employee using hostname + Windows username. On
@@ -89,9 +95,11 @@ pyinstaller --clean TrackerWatchdog.spec
 ```
 
 Compile `setup_script.iss` with Inno Setup. Installation is per-machine and requires
-Windows administrator approval. The setup asks only for the HTTPS API URL, writes
-the machine configuration under `ProgramData`, installs under `Program Files`, and
-starts the tracker for each Windows user through HKLM Run.
+Windows administrator approval. The organization API is built into the agent and is
+not shown in setup. It installs under `Program Files` and starts the tracker for each
+Windows user through HKLM Run. If a profile has not been assigned yet, the agent keeps
+retrying without collecting activity. Diagnostics are written to
+`%AppData%\SentinelTracker\tracker.log`.
 
 Standard users need administrator credentials to uninstall or modify files under
 `Program Files`. A local/domain administrator always retains control of the computer.

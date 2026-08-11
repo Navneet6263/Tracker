@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -12,10 +13,8 @@ load_dotenv()
 USER_CONFIG_DIR = Path(os.getenv("APPDATA") or os.path.expanduser("~")) / "SentinelTracker"
 USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 USER_CONFIG_FILE = USER_CONFIG_DIR / "config.json"
-ORG_CONFIG_FILE = (
-    Path(os.getenv("PROGRAMDATA") or USER_CONFIG_DIR) / "SentinelTracker" / "organization.json"
-)
 HTTP = requests.Session()
+LOGGER = logging.getLogger("sentinel.uploader")
 
 
 def _read_json(path: Path) -> dict:
@@ -29,10 +28,6 @@ def get_user_config() -> dict:
     return _read_json(USER_CONFIG_FILE)
 
 
-def get_org_config() -> dict:
-    return _read_json(ORG_CONFIG_FILE)
-
-
 def save_user_config(data: dict):
     config = get_user_config()
     config.update(data)
@@ -42,10 +37,8 @@ def save_user_config(data: dict):
 
 
 def get_server_url() -> str:
-    config = get_org_config()
     return (
         os.getenv("TRACKER_SERVER")
-        or config.get("server_url")
         or "https://tracker.greencall.online/api"
     ).rstrip("/")
 
@@ -74,7 +67,18 @@ def auto_authenticate(force: bool = False) -> bool:
             timeout=10,
         )
         if response.status_code != 200:
-            print(f"[Authentication] Profile assignment failed ({response.status_code}).")
+            detail = ""
+            try:
+                detail = response.json().get("detail", "")
+            except (ValueError, AttributeError):
+                pass
+            LOGGER.warning(
+                "Profile fetch rejected: status=%s detail=%s identity=%s\\%s",
+                response.status_code,
+                detail,
+                identity["hostname"],
+                identity["username"],
+            )
             return False
         data = response.json()
         save_user_config(
@@ -86,9 +90,16 @@ def auto_authenticate(force: bool = False) -> bool:
                 "shift": data.get("shift"),
             }
         )
+        LOGGER.info(
+            "Profile connected: employee_id=%s name=%s identity=%s\\%s",
+            data["id"],
+            data["name"],
+            identity["hostname"],
+            identity["username"],
+        )
         return True
     except requests.RequestException as exc:
-        print(f"[Authentication] Server unavailable: {exc}")
+        LOGGER.warning("Profile fetch unavailable: %s", exc)
         return False
 
 

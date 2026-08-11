@@ -66,6 +66,38 @@ def create_employee(args, db):
     print(f"Created employee #{employee.id}: {employee.name} ({hostname}\\{username})")
 
 
+def assign_profile(args, db):
+    email = args.email.strip().lower()
+    hostname = args.hostname.strip().lower()
+    username = args.username.strip().lower()
+    employee = db.query(Employee).filter(Employee.email == email).first()
+    if not employee or employee.role != "employee":
+        raise ValueError("Active employee email was not found")
+    if not employee.is_active:
+        raise ValueError("Employee is inactive")
+
+    existing = db.query(WindowsIdentity).filter(
+        WindowsIdentity.hostname == hostname,
+        WindowsIdentity.username == username,
+    ).first()
+    if existing:
+        if existing.employee_id != employee.id:
+            raise ValueError("Windows profile is already assigned to another employee")
+        print(f"Profile already assigned: {hostname}\\{username}")
+        return
+
+    db.add(
+        WindowsIdentity(
+            employee_id=employee.id,
+            windows_sid=args.sid.strip() if args.sid else None,
+            hostname=hostname,
+            username=username,
+        )
+    )
+    db.commit()
+    print(f"Assigned {hostname}\\{username} to employee #{employee.id}: {employee.email}")
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="Provision Sentinel users directly in the DB")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -86,6 +118,13 @@ def build_parser():
     employee.add_argument("--shift-end", default="18:00")
     employee.add_argument("--timezone", default="Asia/Kolkata")
     employee.set_defaults(handler=create_employee)
+
+    profile = commands.add_parser("assign-profile")
+    profile.add_argument("--email", required=True)
+    profile.add_argument("--hostname", required=True)
+    profile.add_argument("--username", required=True)
+    profile.add_argument("--sid")
+    profile.set_defaults(handler=assign_profile)
     return parser
 
 

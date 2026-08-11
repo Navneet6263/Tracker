@@ -1,4 +1,5 @@
 import ctypes
+import logging
 import os
 import subprocess
 import sys
@@ -6,6 +7,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, time as clock_time, timezone
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -45,11 +47,30 @@ IDLE_THRESHOLD_SECS = int(os.getenv("TRACKER_IDLE_SECONDS", "300"))
 SESSION_ID = uuid.uuid4().hex
 IDENTITY = get_windows_identity()
 STOP_FILE = Path(os.getenv("APPDATA") or os.path.expanduser("~")) / "SentinelTracker" / "stop.requested"
+LOG_FILE = STOP_FILE.parent / "tracker.log"
+LOGGER = logging.getLogger("sentinel")
 
 _mutex_handle = None
 _latest_state = "offline"
 _latest_app = None
 _watchdog_pid = None
+
+
+def configure_logging():
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        LOG_FILE,
+        maxBytes=1_000_000,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    )
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    if not root_logger.handlers:
+        root_logger.addHandler(handler)
 
 
 def _acquire_singleton() -> bool:
@@ -282,15 +303,18 @@ def watchdog_guard_loop():
 
 
 def main():
+    configure_logging()
     if not _acquire_singleton():
+        LOGGER.info("Tracker is already running for this Windows profile")
         return
     if STOP_FILE.exists() and "--resume-tracking" not in sys.argv:
         return
     if "--resume-tracking" in sys.argv:
         STOP_FILE.unlink(missing_ok=True)
     init_db()
-    if not auto_authenticate():
-        return
+    while not auto_authenticate():
+        LOGGER.info("Waiting 30 seconds before retrying profile fetch")
+        time.sleep(30)
     start_tracking()
     save_event("client_started", {"session_id": SESSION_ID})
     start_watchdog()
