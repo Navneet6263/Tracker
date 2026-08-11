@@ -35,7 +35,11 @@ def _date_range(period: str):
 @router.get("/summary")
 def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin)):
     since = _date_range("day")
-    employees = db.query(Employee).filter(Employee.role == "employee", Employee.is_active.is_(True)).all()
+    employees = (
+        db.query(Employee)
+        .filter(Employee.role == "employee", Employee.is_active == 1)
+        .all()
+    )
 
     aggregates = []
     try:
@@ -89,7 +93,9 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
     try:
         shift_by_employee = {
             row.employee_id: row
-            for row in db.query(ShiftAssignment).filter(ShiftAssignment.enabled.is_(True)).all()
+            for row in db.query(ShiftAssignment)
+            .filter(ShiftAssignment.enabled == 1)
+            .all()
         }
     except Exception:
         db.rollback()

@@ -49,7 +49,7 @@ def device_login(
 
     shift = db.query(ShiftAssignment).filter(
         ShiftAssignment.employee_id == user.id,
-        ShiftAssignment.enabled.is_(True),
+        ShiftAssignment.enabled == 1,
     ).first()
 
     token = create_token({"sub": user.email, "role": user.role, "id": user.id})
