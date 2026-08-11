@@ -1,27 +1,50 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict
+import asyncio
 import json
 
-router = APIRouter(tags=["ws"])
-connections: Dict[int, WebSocket] = {}
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-@router.websocket("/ws/{employee_id}")
-async def ws_endpoint(websocket: WebSocket, employee_id: int):
+from database import SessionLocal
+from services.auth import get_user_from_token
+
+
+router = APIRouter(tags=["ws"])
+connections: list[WebSocket] = []
+
+
+@router.websocket("/ws/admin")
+async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
-    connections[employee_id] = websocket
+    try:
+        auth_message = await asyncio.wait_for(websocket.receive_text(), timeout=5)
+        token = json.loads(auth_message).get("token", "")
+        db = SessionLocal()
+        try:
+            user = get_user_from_token(token, db)
+            if user.role != "admin":
+                await websocket.close(code=1008, reason="Admin only")
+                return
+        finally:
+            db.close()
+    except Exception:
+        await websocket.close(code=1008, reason="Invalid authentication")
+        return
+
+    connections.append(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(json.dumps({"ack": True}))
+            await websocket.receive_text()
     except WebSocketDisconnect:
-        connections.pop(employee_id, None)
+        if websocket in connections:
+            connections.remove(websocket)
+
 
 async def broadcast_to_admins(message: dict):
-    dead = []
-    for eid, ws in connections.items():
+    dead: list[WebSocket] = []
+    for websocket in list(connections):
         try:
-            await ws.send_text(json.dumps(message))
+            await websocket.send_text(json.dumps(message))
         except Exception:
-            dead.append(eid)
-    for eid in dead:
-        connections.pop(eid, None)
+            dead.append(websocket)
+    for websocket in dead:
+        if websocket in connections:
+            connections.remove(websocket)

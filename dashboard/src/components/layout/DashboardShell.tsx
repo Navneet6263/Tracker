@@ -1,11 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Activity, Bell, Search, LayoutDashboard, Users, Camera, Settings } from "lucide-react";
+import { Activity, Bell, Search, LayoutDashboard, Users, Settings } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 const nav = [
   { icon: LayoutDashboard, label: "Overview", to: "/" },
   { icon: Users, label: "Employees", to: "#employees" },
-  { icon: Camera, label: "Screenshots", to: "#screenshots" },
+  { icon: Activity, label: "Activity", to: "#activity" },
   { icon: Settings, label: "Settings", to: "#settings" },
 ];
 
@@ -49,11 +49,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="absolute inset-x-4 bottom-6 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 p-4 text-white">
-          <p className="text-xs font-semibold">Upgrade to Pro</p>
-          <p className="mt-1 text-[11px] text-slate-300">Add mobile call & app tracking.</p>
-          <button className="mt-3 w-full rounded-lg bg-white/10 py-1.5 text-xs font-medium ring-1 ring-white/20 hover:bg-white/20">
-            Learn more
-          </button>
+          <p className="text-xs font-semibold">Privacy-first tracking</p>
+          <p className="mt-1 text-[11px] text-slate-300">
+            App, call and shift metadata only. No screenshots or audio recording.
+          </p>
         </div>
       </aside>
 

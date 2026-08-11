@@ -3,7 +3,9 @@ PRODUCTIVE = {
     "terminal", "cmd", "powershell", "postman", "figma", "notion", "jira",
     "confluence", "slack", "teams", "zoom", "excel", "word", "outlook",
     "gmail", "google docs", "google sheets", "google meet", "trello",
-    "asana", "linear", "clickup", "chrome devtools", "xcode", "android studio"
+    "asana", "linear", "clickup", "chrome devtools", "xcode", "android studio",
+    "google meet", "meet.google.com", "microsoft teams", "zoom", "webex",
+    "softphone", "voip"
 }
 UNPRODUCTIVE = {
     "youtube", "netflix", "facebook", "instagram", "twitter", "reddit",

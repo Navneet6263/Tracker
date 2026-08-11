@@ -1,22 +1,29 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowLeft, Mail, Clock, Gauge, RefreshCw, Keyboard, Mouse, Terminal, Lock } from "lucide-react";
-import { useState, useEffect } from "react";
-import { DashboardShell } from "@/components/layout/DashboardShell";
-import { StatusPing } from "@/components/dashboard/StatusPing";
-import { ScreenshotGrid } from "@/components/dashboard/ScreenshotGrid";
-import { OnDemandScreenshot } from "@/components/dashboard/OnDemandScreenshot";
+import {
+  ArrowLeft,
+  Clock,
+  Gauge,
+  Headphones,
+  Keyboard,
+  Lock,
+  Mail,
+  Mouse,
+  RefreshCw,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+
 import { AppUsageDetail } from "@/components/dashboard/AppUsageDetail";
 import { OfflineTimeline } from "@/components/dashboard/OfflineTimeline";
-import { useEmployeeDetail, getPingStatus, formatPing } from "@/hooks/useRealData";
-import { fetchSummary, type EmployeeSummary } from "@/lib/api";
+import { PageUsageTable } from "@/components/dashboard/PageUsageTable";
+import { StatusPing } from "@/components/dashboard/StatusPing";
+import { DashboardShell } from "@/components/layout/DashboardShell";
+import { formatPing, getPingStatus, useEmployeeDetail } from "@/hooks/useRealData";
 import { AuthGuard } from "@/lib/auth-guard";
+import { fetchSummary, type EmployeeSummary } from "@/lib/api";
 
 export const Route = createFileRoute("/employees/$id")({
   head: ({ params }) => ({
-    meta: [
-      { title: `Employee #${params.id} · Sentinel` },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: `Employee #${params.id} · Sentinel` }, { name: "robots", content: "noindex" }],
   }),
   component: EmployeeDetailPage,
 });
@@ -32,29 +39,19 @@ function EmployeeDetailPage() {
 function EmployeeDetailContent() {
   const { id } = Route.useParams();
   const employeeId = Number(id);
-  
   const [employee, setEmployee] = useState<EmployeeSummary | null>(null);
-  const [empLoading, setEmpLoading] = useState(true);
+  const [employeeLoading, setEmployeeLoading] = useState(true);
   const [period, setPeriod] = useState<"day" | "week" | "month">("day");
-  
-  const { analytics, screenshots, loading: detailLoading } = useEmployeeDetail(employeeId, period);
-  const [shots, setShots] = useState(screenshots);
+  const { analytics, loading: detailLoading } = useEmployeeDetail(employeeId, period);
 
   useEffect(() => {
     fetchSummary()
-      .then((all) => {
-        const emp = all.find((e) => e.id === employeeId);
-        setEmployee(emp || null);
-      })
-      .catch(() => {})
-      .finally(() => setEmpLoading(false));
+      .then((all) => setEmployee(all.find((item) => item.id === employeeId) ?? null))
+      .catch(() => setEmployee(null))
+      .finally(() => setEmployeeLoading(false));
   }, [employeeId]);
 
-  useEffect(() => {
-    setShots(screenshots);
-  }, [screenshots]);
-
-  if (empLoading || detailLoading) {
+  if (employeeLoading || detailLoading) {
     return (
       <DashboardShell>
         <div className="flex h-64 items-center justify-center text-sm text-slate-400">
@@ -64,51 +61,41 @@ function EmployeeDetailContent() {
     );
   }
 
-  if (!employee) {
+  if (!employee || !analytics) {
     return (
       <DashboardShell>
         <div className="flex h-64 flex-col items-center justify-center gap-3 text-center">
           <p className="text-sm text-slate-500">Employee not found or unauthorized.</p>
           <a href="/" className="text-xs font-medium text-indigo-600 hover:underline">
-            Back to Dashboard
+            Back to dashboard
           </a>
         </div>
       </DashboardShell>
     );
   }
 
-  const status = getPingStatus(employee.active_hours, employee.last_ping);
-  const initials = employee.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-
-  const formattedShots = shots.map((s) => ({
-    id: String(s.id),
-    employee_id: String(employee.id),
-    url: s.url,
-    window_title: s.window_title || "Unknown",
-    timestamp: s.captured_at,
-  }));
-
-  const kbMins = analytics?.keyboard_mins ?? 0;
-  const mouseMins = analytics?.mouse_mins ?? 0;
-  const breakdown = analytics?.app_breakdown ?? [];
-  const offlinePeriods = analytics?.offline_periods ?? [];
+  const status = getPingStatus(employee.active_hours, employee.last_ping, employee.current_state);
+  const initials = employee.name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <DashboardShell>
       <div className="mx-auto max-w-6xl space-y-6">
-        {/* Back Link */}
         <a
           href="/"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 transition hover:text-slate-900"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
         </a>
 
-        {/* Profile Card */}
-        <div className="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <div className="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 font-bold text-white shadow-md">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 font-bold text-white">
                 {initials}
               </div>
               <div>
@@ -118,86 +105,88 @@ function EmployeeDetailContent() {
                   </h1>
                   <StatusPing status={status} />
                 </div>
-                <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <span className="flex items-center gap-1">
                     <Mail className="h-3 w-3" /> {employee.email}
                   </span>
                   <span>·</span>
-                  <span className="capitalize">{status}</span>
-                  <span>·</span>
                   <span>{formatPing(employee.last_ping)}</span>
+                  {employee.shift && (
+                    <>
+                      <span>·</span>
+                      <span>
+                        {employee.shift.name}: {employee.shift.start}–{employee.shift.end}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
-              <MiniStat icon={Gauge} label="Productivity" value={`${employee.productivity_score}%`} />
-              <MiniStat icon={Clock} label="Active Today" value={`${employee.active_hours.toFixed(1)}h`} />
-              <MiniStat icon={Keyboard} label="Typing" value={`${kbMins}m`} />
-              <MiniStat icon={Mouse} label="Mouse Active" value={`${mouseMins}m`} />
-              <MiniStat icon={Terminal} label="Win+R Launches" value={`${analytics?.win_r_count ?? 0}`} />
-              <MiniStat icon={Lock} label="Win+L Locks" value={`${offlinePeriods.filter(p => p.reason === 'screen_locked').length} times`} />
             </div>
           </div>
         </div>
 
-        {/* Period Toggle */}
         <div className="flex items-center gap-2">
-          {(["day", "week", "month"] as const).map((p) => (
+          {(["day", "week", "month"] as const).map((value) => (
             <button
-              key={p}
-              onClick={() => setPeriod(p)}
+              key={value}
+              onClick={() => setPeriod(value)}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition ${
-                period === p
+                period === value
                   ? "bg-indigo-600 text-white"
                   : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
               }`}
             >
-              {p}
+              {value}
             </button>
           ))}
           {detailLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-400" />}
         </div>
 
-        {/* App Usage Breakdown */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <MiniStat
+            icon={Clock}
+            label="Verified work"
+            value={`${analytics.active_hours.toFixed(1)}h`}
+          />
+          <MiniStat icon={Gauge} label="Productivity" value={`${analytics.productivity_score}%`} />
+          <MiniStat icon={Headphones} label="VoIP calls" value={`${analytics.meeting_mins}m`} />
+          <MiniStat icon={Lock} label="Locked" value={`${analytics.locked_mins}m`} />
+          <MiniStat icon={Keyboard} label="Keyboard active" value={`${analytics.keyboard_mins}m`} />
+          <MiniStat icon={Mouse} label="Mouse active" value={`${analytics.mouse_mins}m`} />
+          <MiniStat icon={Clock} label="Passive work" value={`${analytics.passive_mins}m`} />
+          <MiniStat icon={Clock} label="Idle" value={`${analytics.idle_mins}m`} />
+        </div>
+
         <AppUsageDetail
-          breakdown={breakdown}
-          keyboardMins={kbMins}
-          mouseMins={mouseMins}
+          breakdown={analytics.app_breakdown}
+          keyboardMins={analytics.keyboard_mins}
+          mouseMins={analytics.mouse_mins}
         />
 
-        {/* Offline / Locked Timeline */}
-        <OfflineTimeline periods={offlinePeriods} totalIdleMins={analytics?.total_idle_mins} />
+        <PageUsageTable breakdown={analytics.page_breakdown} />
 
-        {/* On-Demand Screenshot */}
-        <OnDemandScreenshot employeeId={String(employee.id)} employeeName={employee.name} />
+        <OfflineTimeline periods={analytics.offline_periods} />
 
-        {/* Recent Screenshots from real API */}
-        <div>
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">Recent Screenshots</h2>
-            <span className="text-xs text-slate-500">Auto-captured every 15 minutes</span>
-          </div>
-          {formattedShots.length === 0 && !detailLoading ? (
-            <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-400">
-              No screenshots yet for this employee.
-            </div>
-          ) : (
-            <ScreenshotGrid
-              screenshots={formattedShots}
-              onDelete={(deletedId) => setShots((prev) => prev.filter((s) => String(s.id) !== deletedId))}
-            />
-          )}
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5 text-sm text-emerald-900">
+          This report uses application, input, VoIP, idle and Windows session metadata only.
+          Screenshots, typed content and call audio are not collected.
         </div>
       </div>
     </DashboardShell>
   );
 }
 
-function MiniStat({ icon: Icon, label, value }: { icon: typeof Clock; label: string; value: string | number }) {
+function MiniStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Clock;
+  label: string;
+  value: string | number;
+}) {
   return (
-    <div className="rounded-xl bg-slate-50 px-4 py-3">
+    <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>

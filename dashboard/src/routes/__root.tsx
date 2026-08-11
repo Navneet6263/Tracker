@@ -74,10 +74,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Sentinel · Employee Tracker" },
-      { name: "description", content: "Real-time employee monitoring dashboard with productivity insights." },
+      {
+        name: "description",
+        content: "Real-time employee monitoring dashboard with productivity insights.",
+      },
       { name: "author", content: "Sentinel" },
       { property: "og:title", content: "Sentinel · Employee Tracker" },
-      { property: "og:description", content: "Real-time employee monitoring dashboard with productivity insights." },
+      {
+        property: "og:description",
+        content: "Real-time employee monitoring dashboard with productivity insights.",
+      },
       { property: "og:type", content: "website" },
     ],
     links: [

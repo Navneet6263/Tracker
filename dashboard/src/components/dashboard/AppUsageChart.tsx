@@ -8,8 +8,13 @@ const CATEGORY_COLOR = (secs: number, total: number) => {
   return "bg-rose-500";
 };
 
-interface AppEntry { app: string; secs: number }
-interface Props { breakdown: AppEntry[] }
+interface AppEntry {
+  app: string;
+  secs: number;
+}
+interface Props {
+  breakdown: AppEntry[];
+}
 
 export function AppUsageChart({ breakdown }: Props) {
   const total = breakdown.reduce((a, e) => a + e.secs, 0) || 1;

@@ -6,8 +6,7 @@ import { StatusPing } from "./StatusPing";
 import { ActivityIndicators } from "./ActivityIndicators";
 
 function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-amber-500" : "bg-rose-500";
+  const color = score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-amber-500" : "bg-rose-500";
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
@@ -18,14 +17,19 @@ function ScoreBar({ score }: { score: number }) {
   );
 }
 
-interface Props { employees: EmployeeSummary[]; liveSignals?: Record<number, LiveSignal> }
+interface Props {
+  employees: EmployeeSummary[];
+  liveSignals?: Record<number, LiveSignal>;
+}
 export function EmployeeTable({ employees, liveSignals = {} }: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Workforce Live View</h2>
-          <p className="text-xs text-slate-500">Real-time ping and input signals across your team</p>
+          <p className="text-xs text-slate-500">
+            Real-time ping and input signals across your team
+          </p>
         </div>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
           {employees.length} members
@@ -37,7 +41,7 @@ export function EmployeeTable({ employees, liveSignals = {} }: Props) {
             <tr className="border-b border-slate-100 bg-slate-50/70 text-[11px] uppercase tracking-wider text-slate-500">
               <th className="px-5 py-3 font-medium">Employee</th>
               <th className="px-5 py-3 font-medium">Productivity</th>
-              <th className="px-5 py-3 font-medium">Active Hours</th>
+              <th className="px-5 py-3 font-medium">Work / Calls</th>
               <th className="px-5 py-3 font-medium">Inputs</th>
               <th className="px-5 py-3 font-medium">Status</th>
               <th className="px-5 py-3" />
@@ -45,15 +49,21 @@ export function EmployeeTable({ employees, liveSignals = {} }: Props) {
           </thead>
           <tbody>
             {employees.map((e) => {
-              const status = getPingStatus(e.active_hours, e.last_ping);
+              const status = getPingStatus(e.active_hours, e.last_ping, e.current_state);
               const live = liveSignals[e.id];
-              const liveInput = live?.inputs ? {
-                is_keyboard_active: live.inputs.keyboard,
-                is_mouse_active: live.inputs.mouse,
-                win_r_count: live.inputs.win_r_count,
-              } : undefined;
+              const liveInput = live?.inputs
+                ? {
+                    is_keyboard_active: live.inputs.keyboard,
+                    is_mouse_active: live.inputs.mouse,
+                  }
+                : undefined;
               // Avatar initials from name
-              const initials = e.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+              const initials = e.name
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
               return (
                 <tr
                   key={e.id}
@@ -70,10 +80,18 @@ export function EmployeeTable({ employees, liveSignals = {} }: Props) {
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3"><ScoreBar score={e.productivity_score} /></td>
-                  <td className="px-5 py-3 tabular-nums text-slate-700">{e.active_hours.toFixed(1)}h</td>
-                  <td className="px-5 py-3"><ActivityIndicators input={liveInput} /></td>
-                  <td className="px-5 py-3"><StatusPing status={status} label={formatPing(e.last_ping)} /></td>
+                  <td className="px-5 py-3">
+                    <ScoreBar score={e.productivity_score} />
+                  </td>
+                  <td className="px-5 py-3 tabular-nums text-slate-700">
+                    {e.active_hours.toFixed(1)}h / {e.meeting_hours.toFixed(1)}h
+                  </td>
+                  <td className="px-5 py-3">
+                    <ActivityIndicators input={liveInput} />
+                  </td>
+                  <td className="px-5 py-3">
+                    <StatusPing status={status} label={formatPing(e.last_ping)} />
+                  </td>
                   <td className="px-5 py-3 text-right">
                     <Link
                       to="/employees/$id"

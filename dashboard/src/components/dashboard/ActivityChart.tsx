@@ -9,7 +9,11 @@ import {
   Legend,
 } from "recharts";
 
-interface Point { day: string; active: number; idle: number }
+interface Point {
+  day: string;
+  active: number;
+  idle: number;
+}
 
 export function ActivityChart({ data }: { data: Point[] }) {
   return (

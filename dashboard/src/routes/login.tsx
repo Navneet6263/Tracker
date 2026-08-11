@@ -22,7 +22,7 @@ function LoginPage() {
       await login(email, password);
       // On success, redirect to dashboard
       navigate({ to: "/" });
-    } catch (err: any) {
+    } catch {
       setError("Invalid email or password");
     } finally {
       setLoading(false);
@@ -34,12 +34,7 @@ function LoginPage() {
       <div className="w-full max-w-md rounded-2xl border border-slate-200/70 bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <div className="mb-8 text-center">
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/20">
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -51,21 +46,13 @@ function LoginPage() {
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
             Welcome to Sentinel
           </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Sign in to access the admin dashboard
-          </p>
+          <p className="mt-2 text-sm text-slate-500">Sign in to access the admin dashboard</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
-          {error && (
-            <div className="rounded-lg bg-rose-50 p-3 text-sm text-rose-600">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-lg bg-rose-50 p-3 text-sm text-rose-600">{error}</div>}
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Email
-            </label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
             <input
               type="email"
               value={email}
@@ -76,9 +63,7 @@ function LoginPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Password
-            </label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
             <input
               type="password"
               value={password}

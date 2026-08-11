@@ -25,17 +25,25 @@ function fmtTime(isoStr: string) {
   return parseUtcDate(isoStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-interface Props { periods: OfflinePeriod[]; totalIdleMins?: number }
+interface Props {
+  periods: OfflinePeriod[];
+  totalIdleMins?: number;
+}
 
 export function OfflineTimeline({ periods, totalIdleMins }: Props) {
   if (!periods || periods.length === 0) return null;
 
-  const calculatedMins = totalIdleMins ?? periods.reduce((sum, p) => {
-    const diff = new Date(p.to).getTime() - new Date(p.from).getTime();
-    return sum + Math.max(0, Math.round(diff / 60000));
-  }, 0);
+  const calculatedMins =
+    totalIdleMins ??
+    periods.reduce((sum, p) => {
+      const diff = new Date(p.to).getTime() - new Date(p.from).getTime();
+      return sum + Math.max(0, Math.round(diff / 60000));
+    }, 0);
 
-  const formattedTotal = calculatedMins < 60 ? `${calculatedMins}m` : `${Math.floor(calculatedMins / 60)}h ${Math.round(calculatedMins % 60)}m`;
+  const formattedTotal =
+    calculatedMins < 60
+      ? `${calculatedMins}m`
+      : `${Math.floor(calculatedMins / 60)}h ${Math.round(calculatedMins % 60)}m`;
 
   return (
     <div className="rounded-2xl border border-slate-200/70 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
@@ -47,7 +55,9 @@ export function OfflineTimeline({ periods, totalIdleMins }: Props) {
           </p>
         </div>
         <div className="rounded-xl bg-amber-50 px-3 py-1.5 ring-1 ring-amber-200/70 text-right">
-          <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-700 block">Total Idle Gap</span>
+          <span className="text-[10px] uppercase tracking-wider font-semibold text-amber-700 block">
+            Total Idle Gap
+          </span>
           <span className="text-xs font-bold text-amber-900">{formattedTotal}</span>
         </div>
       </div>
@@ -68,7 +78,9 @@ export function OfflineTimeline({ periods, totalIdleMins }: Props) {
                     {isLocked ? "Win+L Screen Locked" : "System Offline"}
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Locked at <span className="font-medium text-slate-700">{fmtTime(p.from)}</span> → Unlocked at <span className="font-medium text-slate-700">{fmtTime(p.to)}</span>
+                    Locked at <span className="font-medium text-slate-700">{fmtTime(p.from)}</span>{" "}
+                    → Unlocked at{" "}
+                    <span className="font-medium text-slate-700">{fmtTime(p.to)}</span>
                   </p>
                 </div>
               </div>

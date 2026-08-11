@@ -1,34 +1,42 @@
+"""One-time admin bootstrap utility.
+
+Set ADMIN_EMAIL, ADMIN_NAME and ADMIN_PASSWORD, then run this file manually.
+The API never creates or resets an administrator during startup.
+"""
+
 import os
-from database import SessionLocal, engine
-from models.models import Employee, Base
+
+from database import Base, SessionLocal, engine
+from models.models import Employee
 from services.auth import hash_password
 
-def ensure_default_admin():
-    """Ensures Admin@Greencall.com exists in DB with role='admin' and correct password."""
+
+def create_admin():
+    email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    name = os.getenv("ADMIN_NAME", "Administrator").strip()
+    password = os.getenv("ADMIN_PASSWORD", "")
+    if not email or len(password) < 12:
+        raise RuntimeError("ADMIN_EMAIL and ADMIN_PASSWORD (minimum 12 characters) are required")
+
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
     try:
-        Base.metadata.create_all(bind=engine)
-        db = SessionLocal()
-        
-        emails_to_check = ["Admin@Greencall.com", "admin@greencall.com"]
-        for admin_email in emails_to_check:
-            existing_admin = db.query(Employee).filter(Employee.email == admin_email).first()
-            if not existing_admin:
-                admin = Employee(
-                    name="Admin",
-                    email=admin_email,
-                    hashed_password=hash_password("admin123"),
-                    role="admin"
-                )
-                db.add(admin)
-                print(f"✅ Admin account created! Email: {admin_email} | Password: admin123")
-            else:
-                existing_admin.hashed_password = hash_password("admin123")
-                existing_admin.role = "admin"
-                print(f"✅ Admin account ({admin_email}) password updated to: admin123")
+        if db.query(Employee).filter(Employee.email == email).first():
+            raise RuntimeError("An account with this email already exists")
+        db.add(
+            Employee(
+                name=name,
+                email=email,
+                hashed_password=hash_password(password),
+                role="admin",
+                is_active=True,
+            )
+        )
         db.commit()
+        print(f"Admin created: {email}")
+    finally:
         db.close()
-    except Exception as e:
-        print(f"[Admin Seed Warning] {e}")
+
 
 if __name__ == "__main__":
-    ensure_default_admin()
+    create_admin()

@@ -23,6 +23,9 @@ var/
 wheels/
 share/python-wheels/
 *.egg-info/
+.test_deps/
+.build_deps/
+.pytest_cache/
 .installed.cfg
 *.egg
 

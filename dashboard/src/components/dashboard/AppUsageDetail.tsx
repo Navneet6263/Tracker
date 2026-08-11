@@ -1,5 +1,9 @@
 // App time breakdown — horizontal bar chart showing hours per app
-interface AppItem { app: string; secs: number; hours: number }
+interface AppItem {
+  app: string;
+  secs: number;
+  hours: number;
+}
 
 const COLORS: Record<string, string> = {
   Gmail: "bg-red-500",

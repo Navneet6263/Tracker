@@ -11,6 +11,7 @@ def main():
 
     main_pid = int(sys.argv[1])
     main_exe_path = sys.argv[2]
+    stop_file = sys.argv[3] if len(sys.argv) >= 4 else None
 
     # Wait a moment to ensure the main process is fully registered if it just started
     time.sleep(2)
@@ -28,6 +29,9 @@ def main():
             pass
 
         if not is_running:
+            if stop_file and os.path.exists(stop_file):
+                print("Watchdog: authorized stop marker found; exiting without restart.")
+                return
             # Main process died! Restart it!
             try:
                 print(f"Watchdog: Main process {main_pid} died. Restarting {main_exe_path}...")
@@ -35,11 +39,11 @@ def main():
                 # Restart the main process.
                 if main_exe_path.endswith('.py'):
                     # If running as script, use python executable
-                    new_p = subprocess.Popen([sys.executable, main_exe_path, "--from-watchdog"], 
+                    new_p = subprocess.Popen([sys.executable, main_exe_path, "--from-watchdog", "--watchdog-pid", str(os.getpid())],
                                              creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
                 else:
                     # If running as compiled exe
-                    new_p = subprocess.Popen([main_exe_path, "--from-watchdog"], 
+                    new_p = subprocess.Popen([main_exe_path, "--from-watchdog", "--watchdog-pid", str(os.getpid())],
                                              creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS)
                 
                 main_pid = new_p.pid

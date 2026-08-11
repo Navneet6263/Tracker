@@ -1,97 +1,115 @@
-# Employee Monitoring Tool
+# Sentinel Workforce Activity Tracker
 
-## Project Structure
-```
-Tracker/
-├── desktop_client/       # Python Windows client (.exe)
-├── backend/              # FastAPI server
-└── dashboard/            # React admin + employee portal
-```
+Privacy-first Windows activity tracking for pre-created employees. The current
+design stores application, input-activity, VoIP, idle, lock and shift metadata.
+It does **not** capture screenshots, typed text, mouse coordinates or call audio.
 
----
+## Architecture
 
-## 1. Desktop Client Setup
+- `desktop_client/`: one agent process per Windows user profile, local offline queue,
+  app/input/lock/VoIP detection and a watchdog.
+- `backend/`: FastAPI, SQL Server, JWT authentication, activity batching, presence,
+  analytics and durable agent commands.
+- `dashboard/`: admin-only React dashboard with password change and employee reports.
 
-```bash
-cd desktop_client
-pip install -r requirements.txt
+## Backend
 
-# Set env vars before running
-set TRACKER_SERVER=http://your-server:8000
-set TRACKER_TOKEN=<employee_jwt_token>
-
-python main.py
-```
-
-**Build .exe:**
-```bash
-pyinstaller --onefile --windowed --name=tracker main.py
-# Then compile installer.iss with Inno Setup
-```
-
----
-
-## 2. Backend Setup
-
-```bash
+```powershell
 cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-
-# Copy and fill in env
-copy .env.example .env
-
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+Copy-Item .env.example .env
+# Fill all production values in .env
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-**Requirements:**
-- MS SQL Server running with a `TrackerDB` database
-- AWS S3 bucket named `tracker-screenshots`
-- Redis on `localhost:6379`
+The API intentionally has no public registration endpoint. Create accounts from
+the trusted server shell:
 
-**Create first admin:**
-```bash
-curl -X POST http://localhost:8000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Admin","email":"admin@company.com","password":"secret","role":"admin"}'
+```powershell
+python manage_users.py create-admin --name "Admin" --email "admin@company.com"
+
+python manage_users.py create-employee `
+  --name "Rahul Sharma" `
+  --email "rahul@company.com" `
+  --hostname "PC-101" `
+  --username "rahul" `
+  --shift-name "Day" `
+  --shift-start "09:00" `
+  --shift-end "18:00"
+
+python manage_users.py create-employee `
+  --name "Amit Kumar" `
+  --email "amit@company.com" `
+  --hostname "PC-101" `
+  --username "amit" `
+  --shift-name "Night" `
+  --shift-start "19:00" `
+  --shift-end "05:00"
 ```
 
----
+The agent fetches the pre-created employee using hostname + Windows username. On
+the first successful match it stores that profile's Windows SID automatically.
+Admin Windows profiles are not mapped and therefore do not start employee tracking.
 
-## 3. Dashboard Setup
+Important API routes:
 
-```bash
+- `POST /auth/login`: admin dashboard login
+- `POST /auth/device-login`: fetch a pre-created Windows profile
+- `POST /auth/change-password`: authenticated password change
+- `POST /activity/batch`: idempotent metadata activity batches
+- `POST /events`: lock, unlock, session and connectivity events
+- `POST /events/ping`: current presence plus queued commands
+- `GET /analytics/summary`: optimized workforce summary
+- `GET /analytics/employee/{id}`: employee activity report
+- `WS /ws/admin`: authenticated admin live events (token is the first socket message)
+
+## Dashboard
+
+```powershell
 cd dashboard
 npm install
-npm start        # dev
-npm run build    # production
+npm run build
+npm run dev
 ```
 
-Set `REACT_APP_API_URL=http://your-server:8000` in a `.env` file.
+Set `VITE_API_URL` to the API URL. The dashboard requires an authenticated admin;
+an employee token cannot open it.
 
----
+## Windows agent and installer
 
-## API Endpoints
+Build both executables:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/register` | Register user |
-| POST | `/auth/login` | Login → JWT |
-| GET | `/auth/me` | Current user |
-| POST | `/screenshots/upload` | Upload screenshot |
-| GET | `/screenshots/{id}` | List screenshots |
-| POST | `/events` | Log system event |
-| GET | `/events/{id}` | Get events |
-| GET | `/analytics/summary` | Admin summary |
-| GET | `/analytics/employee/{id}` | Per-employee stats |
-| WS | `/ws/{employee_id}` | Live WebSocket |
+```powershell
+cd desktop_client
+pip install -r requirements.txt
+pyinstaller --clean EmployeeTracker.spec
+pyinstaller --clean TrackerWatchdog.spec
+```
 
----
+Compile `setup_script.iss` with Inno Setup. Installation is per-machine and requires
+Windows administrator approval. The setup asks only for the HTTPS API URL, writes
+the machine configuration under `ProgramData`, installs under `Program Files`, and
+starts the tracker for each Windows user through HKLM Run.
 
-## Phases
+Standard users need administrator credentials to uninstall or modify files under
+`Program Files`. A local/domain administrator always retains control of the computer.
 
-| Phase | Status | Features |
-|-------|--------|---------|
-| 1 | ✅ | Client exe, FastAPI, basic dashboard |
-| 2 | ✅ | Lock/sleep detection, offline sync, WebSockets |
-| 3 | ✅ | Recharts analytics, app breakdown |
-| 4 | ✅ | Screenshot encryption, role-based access, FAANG UI |
+## Activity rules
+
+- Keyboard and mouse content is never captured; only event counts and active seconds.
+- The active app and page/window title are stored with time; no screenshot is taken.
+- Active input, verified passive activity and detected VoIP calls count as work.
+- Idle, locked and off-shift time do not count as verified work.
+- Meet, Teams, Zoom, Webex and Slack Huddles are detected through application/window
+  metadata and Windows audio sessions. Audio is never recorded.
+- Activity is aggregated locally into 30-second intervals and uploaded in batches.
+- Presence uses a 30-second upsert instead of writing a history row every few seconds.
+
+## Delivery status
+
+This repository can be used for a controlled pilot after configuration and testing.
+Before a 300-device rollout, add code signing, managed GPO/Intune deployment, formal DB
+migrations, monitoring/backups, load testing, an auto-update channel and organization
+privacy/retention approval.

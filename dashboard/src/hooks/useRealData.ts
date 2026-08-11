@@ -3,11 +3,10 @@ import { useState, useEffect, useCallback } from "react";
 import {
   fetchSummary,
   fetchEmployeeAnalytics,
-  fetchScreenshots,
   getWsUrl,
+  getWsToken,
   type EmployeeSummary,
   type EmployeeAnalytics,
-  type ScreenshotItem,
 } from "@/lib/api";
 
 // ─── Summary hook (used by main dashboard) ───────────────────────────────────
@@ -28,7 +27,9 @@ export function useSummary() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return { data, loading, error, refetch: load };
 }
@@ -36,33 +37,42 @@ export function useSummary() {
 // ─── Employee detail hook ─────────────────────────────────────────────────────
 export function useEmployeeDetail(id: number, period = "day") {
   const [analytics, setAnalytics] = useState<EmployeeAnalytics | null>(null);
-  const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      fetchEmployeeAnalytics(id, period),
-      fetchScreenshots(id),
-    ])
-      .then(([a, s]) => {
-        if (!cancelled) { setAnalytics(a); setScreenshots(s); }
+    fetchEmployeeAnalytics(id, period)
+      .then((result) => {
+        if (!cancelled) setAnalytics(result);
       })
-      .catch((e) => { if (!cancelled) setError(e.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id, period]);
 
-  return { analytics, screenshots, loading, error };
+  return { analytics, loading, error };
 }
 
 // ─── Live WebSocket hook (for real-time active status & keyboard/mouse) ───────
 export interface LiveSignal {
   employee_id: number;
   type: string;
-  inputs?: { keyboard: boolean; mouse: boolean; win_r_count: number };
+  state?: string;
+  app_name?: string | null;
+  inputs?: {
+    keyboard: boolean;
+    mouse: boolean;
+    keyboard_events?: number;
+    mouse_events?: number;
+  };
 }
 
 export function useLiveSignals(adminId: number | null) {
@@ -70,7 +80,8 @@ export function useLiveSignals(adminId: number | null) {
 
   useEffect(() => {
     if (!adminId) return;
-    const ws = new WebSocket(getWsUrl(`/ws/${adminId}`));
+    const ws = new WebSocket(getWsUrl("/ws/admin"));
+    ws.onopen = () => ws.send(JSON.stringify({ token: getWsToken() }));
 
     ws.onmessage = (event) => {
       try {
@@ -86,7 +97,9 @@ export function useLiveSignals(adminId: number | null) {
             });
           }, 60_000);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
 
     return () => ws.close();
@@ -96,7 +109,8 @@ export function useLiveSignals(adminId: number | null) {
 }
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
-export type PingStatus = "active" | "idle" | "tamper";
+export type PingStatus =
+  "active" | "meeting" | "passive" | "idle" | "locked" | "off_shift" | "offline" | "tamper";
 
 function parseUtcDate(dateStr: string | null): Date {
   if (!dateStr) return new Date(0);
@@ -104,11 +118,19 @@ function parseUtcDate(dateStr: string | null): Date {
   return new Date(normalized);
 }
 
-export function getPingStatus(active_hours: number, last_ping: string | null): PingStatus {
-  if (!last_ping) return "idle";
+export function getPingStatus(
+  active_hours: number,
+  last_ping: string | null,
+  current_state?: string,
+): PingStatus {
+  if (!last_ping) return "offline";
   const ageMin = (Date.now() - parseUtcDate(last_ping).getTime()) / 60_000;
+  if (current_state === "off_shift" && ageMin <= 5) return "off_shift";
   if (active_hours > 0 && ageMin > 15) return "tamper";
-  if (ageMin > 5) return "idle";
+  if (ageMin > 5) return "offline";
+  if (["meeting", "passive", "idle", "locked"].includes(current_state ?? "")) {
+    return current_state as PingStatus;
+  }
   return "active";
 }
 
