@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -6,13 +7,15 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.models import ActivityInterval, Employee
+from models.models import ActivityInterval, Employee, ShiftAssignment
 from routers.ws import broadcast_to_admins
 from services.auth import get_current_user
 from services.productivity import classify
+from services.shifts import WORK_STATES, infer_shift_assignment, is_within_shift
 
 
 router = APIRouter(prefix="/activity", tags=["activity"])
+LOGGER = logging.getLogger("sentinel.activity")
 ALLOWED_STATES = {"active", "passive", "meeting", "idle", "locked"}
 
 
@@ -66,6 +69,14 @@ async def ingest_activity(
         .filter(ActivityInterval.client_event_id.in_(requested_ids))
         .all()
     }
+    assigned_shift = (
+        db.query(ShiftAssignment)
+        .filter(
+            ShiftAssignment.employee_id == user.id,
+            ShiftAssignment.enabled == 1,
+        )
+        .first()
+    )
 
     seen_ids = set(existing_ids)
     for sample in req.samples:
@@ -87,6 +98,10 @@ async def ingest_activity(
             sample.domain or ""
         ).strip().casefold() == "windows default lock screen":
             normalized_state = "locked"
+        if normalized_state in WORK_STATES and not is_within_shift(
+            started_at, assigned_shift
+        ):
+            normalized_state = "off_shift"
         label = " ".join(filter(None, [sample.app_name, sample.domain]))
         category = "productive" if normalized_state == "meeting" else classify(label)
         row = ActivityInterval(
@@ -112,6 +127,12 @@ async def ingest_activity(
         latest = row
 
     db.commit()
+
+    try:
+        infer_shift_assignment(db, user.id)
+    except Exception:
+        db.rollback()
+        LOGGER.exception("Automatic shift inference failed for employee_id=%s", user.id)
 
     if latest is not None:
         await broadcast_to_admins(

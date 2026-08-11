@@ -14,10 +14,11 @@ from fastapi.testclient import TestClient
 
 from database import Base, SessionLocal, engine
 from main import app
-from models.models import Employee, ShiftAssignment, WindowsIdentity
+from models.models import ActivityInterval, Employee, ShiftAssignment, WindowsIdentity
 from models.models import SystemEvent
 from routers.analytics import _normalize_page_title, _pair_gap_events
 from services.auth import hash_password
+from services.shifts import TIMEZONE
 
 
 def test_privacy_first_api_flow():
@@ -101,12 +102,93 @@ def test_privacy_first_api_flow():
     )
     assert auto_login.status_code == 200
     assert auto_login.json()["name"] == "Amit"
+    assert auto_login.json()["shift"] is None
+    auto_employee_token = auto_login.json()["access_token"]
     auto_identity_db = SessionLocal()
     auto_identity = auto_identity_db.query(WindowsIdentity).filter_by(
         hostname="pc-202", username="amit"
     ).one()
     assert auto_identity.employee_id == auto_employee_id
     auto_identity_db.close()
+
+    local_now = datetime.now(TIMEZONE)
+    learning_samples = []
+    for days_ago in (2, 1):
+        local_start = (local_now - timedelta(days=days_ago)).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+        for offset in range(3):
+            started = (local_start + timedelta(minutes=5 * offset)).astimezone(
+                timezone.utc
+            )
+            learning_samples.append(
+                {
+                    "event_id": str(uuid.uuid4()),
+                    "session_id": f"learning-{days_ago}",
+                    "device_name": "pc-202",
+                    "windows_user": "amit",
+                    "state": "active",
+                    "app_name": "CRM",
+                    "domain": "Customer records",
+                    "started_at": started.isoformat(),
+                    "ended_at": (started + timedelta(minutes=5)).isoformat(),
+                    "keyboard_events": 20,
+                    "mouse_events": 10,
+                    "keyboard_active_secs": 120,
+                    "mouse_active_secs": 60,
+                }
+            )
+    learned = client.post(
+        "/activity/batch",
+        headers={"Authorization": f"Bearer {auto_employee_token}"},
+        json={"samples": learning_samples},
+    )
+    assert learned.status_code == 200
+    shift_db = SessionLocal()
+    learned_shift = shift_db.query(ShiftAssignment).filter_by(
+        employee_id=auto_employee_id
+    ).one()
+    assert learned_shift.shift_name == "Day (Auto)"
+    shift_db.close()
+
+    learned_ping = client.post(
+        "/events/ping",
+        headers={"Authorization": f"Bearer {auto_employee_token}"},
+        json={
+            "state": "active",
+            "app_name": "CRM",
+            "device_name": "pc-202",
+            "windows_user": "amit",
+        },
+    )
+    assert learned_ping.status_code == 200
+    assert learned_ping.json()["shift"]["name"] == "Day (Auto)"
+    assert learned_ping.json()["shift"]["automatic"] is True
+
+    outside_shift = (local_now - timedelta(days=1)).replace(
+        hour=18, minute=30, second=0, microsecond=0
+    ).astimezone(timezone.utc)
+    off_shift_event_id = str(uuid.uuid4())
+    off_shift_upload = client.post(
+        "/activity/batch",
+        headers={"Authorization": f"Bearer {auto_employee_token}"},
+        json={
+            "samples": [
+                {
+                    **learning_samples[0],
+                    "event_id": off_shift_event_id,
+                    "started_at": outside_shift.isoformat(),
+                    "ended_at": (outside_shift + timedelta(minutes=1)).isoformat(),
+                }
+            ]
+        },
+    )
+    assert off_shift_upload.status_code == 200
+    shift_db = SessionLocal()
+    assert shift_db.query(ActivityInterval).filter_by(
+        client_event_id=off_shift_event_id
+    ).one().state == "off_shift"
+    shift_db.close()
 
     ended_at = datetime.now(timezone.utc)
     started_at = ended_at - timedelta(seconds=30)

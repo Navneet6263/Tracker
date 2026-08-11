@@ -14,6 +14,7 @@ from models.models import (
     SystemEvent,
 )
 from services.auth import get_current_user, require_admin
+from services.shifts import is_within_shift, serialize_shift
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -179,14 +180,7 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
                 "last_ping": presence.last_seen.isoformat() if presence else None,
                 "current_state": presence.state if presence else "offline",
                 "current_app": presence.app_name if presence else None,
-                "shift": None
-                if shift is None
-                else {
-                    "name": shift.shift_name,
-                    "start": shift.start_local,
-                    "end": shift.end_local,
-                    "timezone": shift.timezone_name,
-                },
+                "shift": serialize_shift(shift),
             }
         )
     return result
@@ -206,6 +200,7 @@ def employee_analytics(
 
     since = _date_range(period)
     intervals = []
+    shift = None
     try:
         intervals = (
             db.query(ActivityInterval)
@@ -215,6 +210,17 @@ def employee_analytics(
             )
             .order_by(ActivityInterval.started_at.asc())
             .all()
+        )
+    except Exception:
+        db.rollback()
+    try:
+        shift = (
+            db.query(ShiftAssignment)
+            .filter(
+                ShiftAssignment.employee_id == employee_id,
+                ShiftAssignment.enabled == 1,
+            )
+            .first()
         )
     except Exception:
         db.rollback()
@@ -232,6 +238,10 @@ def employee_analytics(
         effective_state = _effective_state(
             interval.state, interval.app_name, interval.domain
         )
+        if effective_state in WORK_STATES and not is_within_shift(
+            interval.started_at, shift
+        ):
+            effective_state = "off_shift"
         state_secs[effective_state] = (
             state_secs.get(effective_state, 0) + interval.duration_secs
         )

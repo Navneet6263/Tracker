@@ -106,7 +106,13 @@ export interface EmployeeSummary {
   last_ping: string | null;
   current_state: string;
   current_app: string | null;
-  shift: { name: string; start: string; end: string; timezone: string } | null;
+  shift: {
+    name: string;
+    start: string;
+    end: string;
+    timezone: string;
+    automatic?: boolean;
+  } | null;
 }
 
 export interface EmployeeAnalytics {

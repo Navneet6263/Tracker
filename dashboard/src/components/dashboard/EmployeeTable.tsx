@@ -77,6 +77,11 @@ export function EmployeeTable({ employees, liveSignals = {} }: Props) {
                       <div>
                         <p className="font-medium text-slate-900">{e.name}</p>
                         <p className="text-xs text-slate-500">{e.email}</p>
+                        <p className="mt-0.5 text-[11px] text-indigo-600">
+                          {e.shift
+                            ? `${e.shift.name} · ${e.shift.start}–${e.shift.end}`
+                            : "Learning shift · needs 2 working days"}
+                        </p>
                       </div>
                     </div>
                   </td>

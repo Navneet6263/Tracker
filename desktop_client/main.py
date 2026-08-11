@@ -25,6 +25,7 @@ from utils.uploader import (
     auto_authenticate,
     get_user_config,
     ping_online,
+    save_user_config,
     upload_activity,
     upload_event,
 )
@@ -242,6 +243,8 @@ def sync_loop():
         if online and time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL_SECS:
             response = ping_online(_latest_state, _latest_app)
             last_heartbeat = time.monotonic()
+            if "shift" in response and response["shift"] != get_user_config().get("shift"):
+                save_user_config({"shift": response["shift"]})
             if response.get("command") == "stop_client":
                 STOP_FILE.parent.mkdir(parents=True, exist_ok=True)
                 STOP_FILE.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")

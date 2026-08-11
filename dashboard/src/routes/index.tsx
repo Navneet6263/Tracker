@@ -61,7 +61,7 @@ function DashboardContent() {
 
   if (loading) {
     return (
-      <DashboardShell>
+      <DashboardShell employees={employees}>
         <div className="flex h-64 items-center justify-center text-sm text-slate-400">
           Loading team data…
         </div>
@@ -75,7 +75,7 @@ function DashboardContent() {
       return null;
     }
     return (
-      <DashboardShell>
+      <DashboardShell employees={employees}>
         <div className="flex h-64 items-center justify-center text-sm text-rose-500">
           Cannot reach the activity service: {error}
         </div>
@@ -84,8 +84,8 @@ function DashboardContent() {
   }
 
   return (
-    <DashboardShell>
-      <div className="mx-auto max-w-7xl space-y-6">
+    <DashboardShell employees={employees}>
+      <div id="overview" className="mx-auto max-w-7xl scroll-mt-24 space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="text-xs font-medium uppercase tracking-widest text-indigo-600">
@@ -112,38 +112,66 @@ function DashboardContent() {
           </div>
         </div>
 
-        <AlertBanner anomalyCount={anomalyCount} />
-        <TimeSavingsBanner employees={employees} />
+        <div id="activity" className="scroll-mt-24 space-y-6">
+          <AlertBanner anomalyCount={anomalyCount} />
+          <TimeSavingsBanner employees={employees} />
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Currently working"
-            value={`${active}/${total}`}
-            hint="Input, passive work or active calls"
-            icon={Users}
-            tone="success"
-          />
-          <StatCard
-            label="Avg productivity"
-            value={`${averageScore}%`}
-            hint="Productive time / verified work time"
-            icon={Gauge}
-          />
-          <StatCard
-            label="Verified work today"
-            value={`${totalHours.toFixed(1)}h`}
-            hint="Excludes idle, lock and off-shift time"
-            icon={Clock}
-          />
-          <StatCard
-            label="VoIP/client calls"
-            value={`${meetingHours.toFixed(1)}h`}
-            hint="Meet, Zoom, Teams, Webex and configured VoIP"
-            icon={Headphones}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Currently working"
+              value={`${active}/${total}`}
+              hint="Input, passive work or active calls"
+              icon={Users}
+              tone="success"
+            />
+            <StatCard
+              label="Avg productivity"
+              value={`${averageScore}%`}
+              hint="Productive time / verified work time"
+              icon={Gauge}
+            />
+            <StatCard
+              label="Verified work today"
+              value={`${totalHours.toFixed(1)}h`}
+              hint="Excludes idle, lock and off-shift time"
+              icon={Clock}
+            />
+            <StatCard
+              label="VoIP/client calls"
+              value={`${meetingHours.toFixed(1)}h`}
+              hint="Meet, Zoom, Teams, Webex and configured VoIP"
+              icon={Headphones}
+            />
+          </div>
         </div>
 
-        <EmployeeTable employees={employees} liveSignals={liveSignals} />
+        <div id="employees" className="scroll-mt-24">
+          <EmployeeTable employees={employees} liveSignals={liveSignals} />
+        </div>
+
+        <div
+          id="settings"
+          className="flex scroll-mt-24 flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/70 bg-white p-5 shadow-sm"
+        >
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Admin settings</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Account security and dashboard session controls.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <ChangePasswordDialog />
+            <button
+              onClick={() => {
+                logout();
+                navigate({ to: "/login" });
+              }}
+              className="rounded-full bg-white px-3 py-1.5 text-xs text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-50"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
     </DashboardShell>
   );

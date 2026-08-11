@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models.models import Employee, ShiftAssignment, WindowsIdentity
 from services.auth import verify_password, create_token, hash_password, get_current_user
+from services.shifts import serialize_shift
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -104,12 +105,7 @@ def device_login(
         "role": user.role,
         "id": user.id,
         "name": user.name,
-        "shift": None if shift is None else {
-            "name": shift.shift_name,
-            "start": shift.start_local,
-            "end": shift.end_local,
-            "timezone": shift.timezone_name,
-        },
+        "shift": serialize_shift(shift),
     }
 
 

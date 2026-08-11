@@ -15,11 +15,12 @@ export function useSummary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetchSummary();
       setData(res);
+      setError(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -29,6 +30,8 @@ export function useSummary() {
 
   useEffect(() => {
     load();
+    const timer = window.setInterval(() => load(true), 30_000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   return { data, loading, error, refetch: load };

@@ -4,7 +4,7 @@
 [Setup]
 AppId={{8F4C2A1E-9A3B-4C2D-8E1F-7A6B5C4D3E2F}
 AppName=Sentinel Employee Tracker
-AppVersion=2.1
+AppVersion=2.2
 AppPublisher=Sentinel Systems
 DefaultDirName={autopf}\Sentinel Employee Tracker
 DefaultGroupName=Sentinel Employee Tracker

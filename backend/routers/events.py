@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.models import AgentCommand, Employee, EmployeePresence, SystemEvent
+from models.models import AgentCommand, Employee, EmployeePresence, ShiftAssignment, SystemEvent
 from routers.ws import broadcast_to_admins
 from services.auth import get_current_user, require_admin
+from services.shifts import serialize_shift
 
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -130,6 +131,14 @@ async def ping(
     if command is not None:
         command_name = command.command
         command.delivered_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    shift = (
+        db.query(ShiftAssignment)
+        .filter(
+            ShiftAssignment.employee_id == user.id,
+            ShiftAssignment.enabled == 1,
+        )
+        .first()
+    )
     db.commit()
 
     await broadcast_to_admins(
@@ -140,7 +149,11 @@ async def ping(
             "app_name": req.app_name,
         }
     )
-    return {"status": "ok", "command": command_name}
+    return {
+        "status": "ok",
+        "command": command_name,
+        "shift": serialize_shift(shift),
+    }
 
 
 @router.get("/{employee_id}")

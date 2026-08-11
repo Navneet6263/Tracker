@@ -59,6 +59,13 @@ The agent fetches the pre-created employee using hostname + Windows username. On
 the first successful match it stores that profile's Windows SID automatically.
 Admin Windows profiles are not mapped and therefore do not start employee tracking.
 
+If an employee is created without `--shift-name`, Sentinel learns the shift from
+metadata during the first two qualified working days. At least 15 minutes of work
+per day and 65% agreement are required. It then assigns `Day (Auto)` (09:00-18:00)
+or `Night (Auto)` (19:00-05:00). Manual shift assignments are never overwritten.
+The API enforces the assigned shift as well as returning it to the agent on each
+heartbeat, so off-shift activity is excluded even while an older agent is running.
+
 Important API routes:
 
 - `POST /auth/login`: admin dashboard login
@@ -114,6 +121,8 @@ Standard users need administrator credentials to uninstall or modify files under
   metadata and Windows audio sessions. Audio is never recorded.
 - Activity is aggregated locally into 30-second intervals and uploaded in batches.
 - Presence uses a 30-second upsert instead of writing a history row every few seconds.
+- Automatic shifts are learned once, remain stable, and can be replaced by an admin
+  assignment in the database when an employee changes schedules.
 
 ## Delivery status
 
