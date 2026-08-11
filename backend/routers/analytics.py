@@ -37,32 +37,37 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
     since = _date_range("day")
     employees = db.query(Employee).filter(Employee.role == "employee", Employee.is_active.is_(True)).all()
 
-    aggregates = (
-        db.query(
-            ActivityInterval.employee_id,
-            func.sum(
-                case(
-                    (ActivityInterval.state.in_(WORK_STATES), ActivityInterval.duration_secs),
-                    else_=0,
-                )
-            ).label("work_secs"),
-            func.sum(
-                case(
-                    (ActivityInterval.category == "productive", ActivityInterval.duration_secs),
-                    else_=0,
-                )
-            ).label("productive_secs"),
-            func.sum(
-                case(
-                    (ActivityInterval.state == "meeting", ActivityInterval.duration_secs),
-                    else_=0,
-                )
-            ).label("meeting_secs"),
+    aggregates = []
+    try:
+        aggregates = (
+            db.query(
+                ActivityInterval.employee_id,
+                func.sum(
+                    case(
+                        (ActivityInterval.state.in_(WORK_STATES), ActivityInterval.duration_secs),
+                        else_=0,
+                    )
+                ).label("work_secs"),
+                func.sum(
+                    case(
+                        (ActivityInterval.category == "productive", ActivityInterval.duration_secs),
+                        else_=0,
+                    )
+                ).label("productive_secs"),
+                func.sum(
+                    case(
+                        (ActivityInterval.state == "meeting", ActivityInterval.duration_secs),
+                        else_=0,
+                    )
+                ).label("meeting_secs"),
+            )
+            .filter(ActivityInterval.started_at >= since)
+            .group_by(ActivityInterval.employee_id)
+            .all()
         )
-        .filter(ActivityInterval.started_at >= since)
-        .group_by(ActivityInterval.employee_id)
-        .all()
-    )
+    except Exception:
+        db.rollback()
+
     aggregate_by_employee = {
         row.employee_id: {
             "work": int(row.work_secs or 0),
@@ -71,13 +76,23 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
         }
         for row in aggregates
     }
-    presence_by_employee = {
-        row.employee_id: row for row in db.query(EmployeePresence).all()
-    }
-    shift_by_employee = {
-        row.employee_id: row
-        for row in db.query(ShiftAssignment).filter(ShiftAssignment.enabled.is_(True)).all()
-    }
+
+    presence_by_employee = {}
+    try:
+        presence_by_employee = {
+            row.employee_id: row for row in db.query(EmployeePresence).all()
+        }
+    except Exception:
+        db.rollback()
+
+    shift_by_employee = {}
+    try:
+        shift_by_employee = {
+            row.employee_id: row
+            for row in db.query(ShiftAssignment).filter(ShiftAssignment.enabled.is_(True)).all()
+        }
+    except Exception:
+        db.rollback()
 
     result = []
     for employee in employees:
@@ -125,15 +140,19 @@ def employee_analytics(
         raise HTTPException(status_code=422, detail="Unsupported period")
 
     since = _date_range(period)
-    intervals = (
-        db.query(ActivityInterval)
-        .filter(
-            ActivityInterval.employee_id == employee_id,
-            ActivityInterval.started_at >= since,
+    intervals = []
+    try:
+        intervals = (
+            db.query(ActivityInterval)
+            .filter(
+                ActivityInterval.employee_id == employee_id,
+                ActivityInterval.started_at >= since,
+            )
+            .order_by(ActivityInterval.started_at.asc())
+            .all()
         )
-        .order_by(ActivityInterval.started_at.asc())
-        .all()
-    )
+    except Exception:
+        db.rollback()
 
     app_secs: dict[tuple[str, str], int] = {}
     page_secs: dict[tuple[str, str], int] = {}
