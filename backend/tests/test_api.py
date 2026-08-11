@@ -35,7 +35,14 @@ def test_privacy_first_api_flow():
         role="employee",
         is_active=True,
     )
-    db.add_all([admin, employee])
+    auto_employee = Employee(
+        name="Amit",
+        email="amit@example.com",
+        hashed_password=hash_password("unused-device-password"),
+        role="employee",
+        is_active=True,
+    )
+    db.add_all([admin, employee, auto_employee])
     db.flush()
     db.add(
         WindowsIdentity(
@@ -57,6 +64,7 @@ def test_privacy_first_api_flow():
     )
     db.commit()
     employee_id = employee.id
+    auto_employee_id = auto_employee.id
     db.close()
 
     client = TestClient(app)
@@ -84,6 +92,19 @@ def test_privacy_first_api_flow():
     assert device_login.status_code == 200
     assert device_login.json()["shift"]["name"] == "Day"
     employee_token = device_login.json()["access_token"]
+
+    auto_login = client.post(
+        "/auth/device-login",
+        json={"username": "amit", "hostname": "pc-202", "windows_sid": "S-1-5-21-test-1002"},
+    )
+    assert auto_login.status_code == 200
+    assert auto_login.json()["name"] == "Amit"
+    auto_identity_db = SessionLocal()
+    auto_identity = auto_identity_db.query(WindowsIdentity).filter_by(
+        hostname="pc-202", username="amit"
+    ).one()
+    assert auto_identity.employee_id == auto_employee_id
+    auto_identity_db.close()
 
     ended_at = datetime.now(timezone.utc)
     started_at = ended_at - timedelta(seconds=30)

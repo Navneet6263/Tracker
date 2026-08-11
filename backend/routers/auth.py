@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -7,6 +9,7 @@ from services.auth import verify_password, create_token, hash_password, get_curr
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+LOGGER = logging.getLogger("sentinel.auth")
 
 @router.post("/login")
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -36,15 +39,57 @@ def device_login(
         WindowsIdentity.hostname == clean_host,
         WindowsIdentity.username == clean_user,
     ).first()
-    if identity is None:
-        raise HTTPException(status_code=403, detail="Windows profile is not assigned to an employee")
-    if identity.windows_sid and req.windows_sid and identity.windows_sid != req.windows_sid:
-        raise HTTPException(status_code=403, detail="Windows profile identity does not match")
-    user = db.query(Employee).filter(Employee.id == identity.employee_id).first()
+    user = None
+    identity_changed = False
+    if identity is not None:
+        if identity.windows_sid and req.windows_sid and identity.windows_sid != req.windows_sid:
+            raise HTTPException(status_code=403, detail="Windows profile identity does not match")
+        user = db.query(Employee).filter(Employee.id == identity.employee_id).first()
+    else:
+        candidates = (
+            db.query(Employee)
+            .filter(Employee.role == "employee", Employee.is_active == 1)
+            .all()
+        )
+        matching_users = [
+            employee
+            for employee in candidates
+            if employee.email.partition("@")[0].strip().lower() == clean_user
+        ]
+        if len(matching_users) == 1:
+            user = matching_users[0]
+            identity = WindowsIdentity(
+                employee_id=user.id,
+                windows_sid=req.windows_sid,
+                hostname=clean_host,
+                username=clean_user,
+            )
+            db.add(identity)
+            identity_changed = True
+            LOGGER.info(
+                "Auto-bound Windows profile %s\\%s to employee_id=%s",
+                clean_host,
+                clean_user,
+                user.id,
+            )
+        else:
+            LOGGER.warning(
+                "Unassigned Windows profile rejected: %s\\%s matching_employees=%s",
+                clean_host,
+                clean_user,
+                len(matching_users),
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="No unique employee email matches the Windows username",
+            )
+
     if not user or not user.is_active or user.role != "employee":
         raise HTTPException(status_code=403, detail="Employee is inactive or invalid")
     if not identity.windows_sid and req.windows_sid:
         identity.windows_sid = req.windows_sid
+        identity_changed = True
+    if identity_changed:
         db.commit()
 
     shift = db.query(ShiftAssignment).filter(
