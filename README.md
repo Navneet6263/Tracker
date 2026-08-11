@@ -104,7 +104,9 @@ pyinstaller --clean TrackerWatchdog.spec
 Compile `setup_script.iss` with Inno Setup. Installation is per-machine and requires
 Windows administrator approval. The organization API is built into the agent and is
 not shown in setup. It installs under `Program Files` and starts the tracker for each
-Windows user through HKLM Run. If a profile has not been assigned yet, the agent keeps
+Windows user through HKLM Run. A Windows profile that was already signed in during
+installation must sign out and sign in once so Windows executes the new startup entry.
+If a profile has not been assigned yet, the agent keeps
 retrying without collecting activity. Diagnostics are written to
 `%AppData%\SentinelTracker\tracker.log`.
 

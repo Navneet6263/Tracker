@@ -4,7 +4,7 @@
 [Setup]
 AppId={{8F4C2A1E-9A3B-4C2D-8E1F-7A6B5C4D3E2F}
 AppName=Sentinel Employee Tracker
-AppVersion=2.2
+AppVersion=2.3
 AppPublisher=Sentinel Systems
 DefaultDirName={autopf}\Sentinel Employee Tracker
 DefaultGroupName=Sentinel Employee Tracker
@@ -37,7 +37,7 @@ Type: files; Name: "{commonappdata}\SentinelTracker\organization.json"
 Name: "{autoprograms}\Sentinel Employee Tracker"; Filename: "{app}\EmployeeTracker.exe"; Parameters: "--resume-tracking"
 
 [Registry]
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SentinelEmployeeTracker"; ValueData: """{app}\EmployeeTracker.exe"""; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SentinelEmployeeTracker"; ValueData: """{app}\EmployeeTracker.exe"" --resume-tracking"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\EmployeeTracker.exe"; Parameters: "--resume-tracking"; Description: "{cm:LaunchProgram,Sentinel Employee Tracker}"; Flags: nowait postinstall skipifsilent runascurrentuser
