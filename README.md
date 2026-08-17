@@ -1,6 +1,7 @@
 # Sentinel Workforce Activity Tracker
 
-Privacy-first Windows activity tracking for pre-created employees. The current
+Privacy-first Windows activity tracking with automatic first-run Windows-profile
+enrollment. The current
 design stores application, input-activity, VoIP, idle, lock and shift metadata.
 It does **not** capture screenshots, typed text, mouse coordinates or call audio.
 
@@ -24,8 +25,13 @@ Copy-Item .env.example .env
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-The API intentionally has no public registration endpoint. Create accounts from
-the trusted server shell:
+The API has no public human-user registration endpoint. By default, the desktop
+agent automatically creates an employee for each new Windows hostname, username
+and SID on first launch. The generated dashboard name is `username (hostname)`;
+the device begins tracking immediately without manual setup or an EXE rebuild.
+Set `ALLOW_DEVICE_AUTO_ENROLLMENT=false` to require pre-created employees instead.
+
+Accounts can still be created manually from the trusted server shell:
 
 ```powershell
 python manage_users.py create-admin --name "Admin" --email "admin@company.com"
@@ -55,9 +61,25 @@ python manage_users.py assign-profile `
   --username "rahul"
 ```
 
-The agent fetches the pre-created employee using hostname + Windows username. On
-the first successful match it stores that profile's Windows SID automatically.
-Admin Windows profiles are not mapped and therefore do not start employee tracking.
+To prepare a completely clean handover database, stop the API and run the
+destructive reset utility from the trusted server shell:
+
+```powershell
+cd backend
+python reset_tracker.py
+```
+
+After showing the configured database, the utility requires `RESET TRACKER` as
+confirmation. It deletes all employees, identities, shifts, activity, presence,
+events and queued commands, resets numeric IDs, then creates the only account:
+`testing@greencall.com` / `admin123` (admin). The recipient should change this
+temporary password immediately after signing in. A hard safety lock refuses to
+run unless the configured database name is exactly `TrackerDB`; other databases
+on the same server are never selected or modified.
+
+The agent identifies the interactive Windows profile using hostname + Windows
+username + SID. A new profile is enrolled once and subsequent launches reuse the
+same employee. Admin dashboard accounts are not mapped as tracker employees.
 
 If an employee is created without `--shift-name`, Sentinel learns the shift from
 metadata during the first two qualified working days. At least 15 minutes of work
@@ -106,8 +128,8 @@ Windows administrator approval. The organization API is built into the agent and
 not shown in setup. It installs under `Program Files` and starts the tracker for each
 Windows user through HKLM Run. A Windows profile that was already signed in during
 installation must sign out and sign in once so Windows executes the new startup entry.
-If a profile has not been assigned yet, the agent keeps
-retrying without collecting activity. Diagnostics are written to
+If automatic enrollment is disabled and a profile has not been assigned yet, the
+agent keeps retrying without collecting activity. Diagnostics are written to
 `%AppData%\SentinelTracker\tracker.log`.
 
 Standard users need administrator credentials to uninstall or modify files under

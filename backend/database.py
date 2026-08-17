@@ -17,14 +17,35 @@ if not db_url:
     trust_server_cert = os.getenv("DB_TRUST_SERVER_CERT", "false").lower() in {"1", "true", "yes"}
     
     if db_user and db_pass and db_server:
+        configured_driver = os.getenv("DB_DRIVER", "").strip()
+        if configured_driver:
+            odbc_driver = configured_driver
+        else:
+            import pyodbc
+
+            installed_drivers = set(pyodbc.drivers())
+            supported_drivers = (
+                "ODBC Driver 18 for SQL Server",
+                "ODBC Driver 17 for SQL Server",
+            )
+            odbc_driver = next(
+                (driver for driver in supported_drivers if driver in installed_drivers),
+                "",
+            )
+            if not odbc_driver:
+                raise RuntimeError(
+                    "Microsoft ODBC Driver 18 or 17 for SQL Server is required"
+                )
+
         safe_user = urllib.parse.quote_plus(db_user)
         safe_pass = urllib.parse.quote_plus(db_pass)
-        # ODBC Driver 17 requires comma syntax for direct TCP port connection (server,port)
+        safe_driver = urllib.parse.quote_plus(odbc_driver)
+        # Microsoft ODBC drivers use comma syntax for a direct TCP port connection.
         encrypt_value = "yes" if db_encrypt else "no"
         trust_value = "yes" if trust_server_cert else "no"
         db_url = (
             f"mssql+pyodbc://{safe_user}:{safe_pass}@{db_server},{db_port}/{db_name}"
-            f"?driver=ODBC+Driver+17+for+SQL+Server&Encrypt={encrypt_value}"
+            f"?driver={safe_driver}&Encrypt={encrypt_value}"
             f"&TrustServerCertificate={trust_value}&timeout=30"
         )
     else:

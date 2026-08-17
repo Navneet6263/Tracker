@@ -82,11 +82,35 @@ def test_privacy_first_api_flow():
     with client.websocket_connect("/ws/admin") as websocket:
         websocket.send_json({"token": admin_token})
 
-    denied_device = client.post(
+    enrolled_device = client.post(
         "/auth/device-login",
         json={"username": "unknown", "hostname": "pc-101", "windows_sid": "S-1-5-21-test-9999"},
     )
-    assert denied_device.status_code == 403
+    assert enrolled_device.status_code == 200
+    assert enrolled_device.json()["name"] == "unknown (pc-101)"
+    enrolled_id = enrolled_device.json()["id"]
+    repeated_enrollment = client.post(
+        "/auth/device-login",
+        json={"username": "unknown", "hostname": "pc-101", "windows_sid": "S-1-5-21-test-9999"},
+    )
+    assert repeated_enrollment.status_code == 200
+    assert repeated_enrollment.json()["id"] == enrolled_id
+    enrollment_db = SessionLocal()
+    assert enrollment_db.query(WindowsIdentity).filter_by(
+        hostname="pc-101", username="unknown"
+    ).count() == 1
+    assert enrollment_db.query(Employee).filter_by(id=enrolled_id).one().email.endswith(
+        "@devices.greencall.local"
+    )
+    enrollment_db.close()
+
+    os.environ["ALLOW_DEVICE_AUTO_ENROLLMENT"] = "false"
+    disabled_enrollment = client.post(
+        "/auth/device-login",
+        json={"username": "blocked", "hostname": "pc-999", "windows_sid": "S-1-5-21-test-blocked"},
+    )
+    os.environ["ALLOW_DEVICE_AUTO_ENROLLMENT"] = "true"
+    assert disabled_enrollment.status_code == 403
 
     device_login = client.post(
         "/auth/device-login",
