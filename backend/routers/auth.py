@@ -10,7 +10,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database import get_db
 from models.models import Employee, ShiftAssignment, WindowsIdentity
-from services.auth import verify_password, create_token, hash_password, get_current_user
+from services.auth import (
+    verify_password,
+    create_token,
+    hash_password,
+    password_hash_needs_rehash,
+    get_current_user,
+)
 from services.shifts import serialize_shift
 from pydantic import BaseModel, Field
 
@@ -64,6 +70,9 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     user = db.query(Employee).filter(Employee.email == form.username).first()
     if not user or not user.is_active or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    if password_hash_needs_rehash(user.hashed_password):
+        user.hashed_password = hash_password(form.password)
+        db.commit()
     token = create_token({"sub": user.email, "role": user.role, "id": user.id})
     return {"access_token": token, "token_type": "bearer", "role": user.role}
 

@@ -17,10 +17,13 @@ if ENVIRONMENT == "production" and SECRET_KEY == "development-only-change-me":
     raise RuntimeError("SECRET_KEY must be configured in production")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 480))
+BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", 10))
+if not 10 <= BCRYPT_ROUNDS <= 14:
+    raise RuntimeError("BCRYPT_ROUNDS must be between 10 and 14")
 
 def hash_password(password: str) -> str:
     pwd_bytes = password.encode('utf-8')[:72]
-    salt = bcrypt.gensalt()
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -30,6 +33,13 @@ def verify_password(plain: str, hashed: str) -> bool:
         return bcrypt.checkpw(pwd_bytes, hashed_bytes)
     except Exception:
         return False
+
+
+def password_hash_needs_rehash(hashed: str) -> bool:
+    try:
+        return int(hashed.split("$")[2]) != BCRYPT_ROUNDS
+    except (IndexError, TypeError, ValueError):
+        return True
 
 def create_token(data: dict) -> str:
     payload = data.copy()

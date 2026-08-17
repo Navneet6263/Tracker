@@ -95,80 +95,65 @@ def _date_range(period: str):
 @router.get("/summary")
 def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin)):
     since = _date_range("day")
-    employees = (
+    activity_totals = (
         db.query(Employee)
+        .with_entities(
+            ActivityInterval.employee_id.label("employee_id"),
+            func.sum(
+                case(
+                    (ActivityInterval.state.in_(WORK_STATES), ActivityInterval.duration_secs),
+                    else_=0,
+                )
+            ).label("work_secs"),
+            func.sum(
+                case(
+                    (ActivityInterval.category == "productive", ActivityInterval.duration_secs),
+                    else_=0,
+                )
+            ).label("productive_secs"),
+            func.sum(
+                case(
+                    (ActivityInterval.state == "meeting", ActivityInterval.duration_secs),
+                    else_=0,
+                )
+            ).label("meeting_secs"),
+        )
+        .filter(ActivityInterval.started_at >= since)
+        .group_by(ActivityInterval.employee_id)
+        .subquery()
+    )
+
+    # One SQL round-trip returns employee, aggregate, presence and shift data.
+    # This matters when the API and SQL Server are in different data centers.
+    rows = (
+        db.query(
+            Employee,
+            activity_totals.c.work_secs,
+            activity_totals.c.productive_secs,
+            activity_totals.c.meeting_secs,
+            EmployeePresence,
+            ShiftAssignment,
+        )
+        .outerjoin(
+            activity_totals,
+            activity_totals.c.employee_id == Employee.id,
+        )
+        .outerjoin(EmployeePresence, EmployeePresence.employee_id == Employee.id)
+        .outerjoin(
+            ShiftAssignment,
+            (ShiftAssignment.employee_id == Employee.id)
+            & (ShiftAssignment.enabled == 1),
+        )
         .filter(Employee.role == "employee", Employee.is_active == 1)
         .all()
     )
 
-    aggregates = []
-    try:
-        aggregates = (
-            db.query(
-                ActivityInterval.employee_id,
-                func.sum(
-                    case(
-                        (ActivityInterval.state.in_(WORK_STATES), ActivityInterval.duration_secs),
-                        else_=0,
-                    )
-                ).label("work_secs"),
-                func.sum(
-                    case(
-                        (ActivityInterval.category == "productive", ActivityInterval.duration_secs),
-                        else_=0,
-                    )
-                ).label("productive_secs"),
-                func.sum(
-                    case(
-                        (ActivityInterval.state == "meeting", ActivityInterval.duration_secs),
-                        else_=0,
-                    )
-                ).label("meeting_secs"),
-            )
-            .filter(ActivityInterval.started_at >= since)
-            .group_by(ActivityInterval.employee_id)
-            .all()
-        )
-    except Exception:
-        db.rollback()
-
-    aggregate_by_employee = {
-        row.employee_id: {
-            "work": int(row.work_secs or 0),
-            "productive": int(row.productive_secs or 0),
-            "meeting": int(row.meeting_secs or 0),
-        }
-        for row in aggregates
-    }
-
-    presence_by_employee = {}
-    try:
-        presence_by_employee = {
-            row.employee_id: row for row in db.query(EmployeePresence).all()
-        }
-    except Exception:
-        db.rollback()
-
-    shift_by_employee = {}
-    try:
-        shift_by_employee = {
-            row.employee_id: row
-            for row in db.query(ShiftAssignment)
-            .filter(ShiftAssignment.enabled == 1)
-            .all()
-        }
-    except Exception:
-        db.rollback()
-
     result = []
-    for employee in employees:
-        metrics = aggregate_by_employee.get(
-            employee.id, {"work": 0, "productive": 0, "meeting": 0}
-        )
-        work_secs = metrics["work"]
-        score = round((metrics["productive"] / work_secs) * 100, 1) if work_secs else 0.0
-        presence = presence_by_employee.get(employee.id)
-        shift = shift_by_employee.get(employee.id)
+    for employee, work_value, productive_value, meeting_value, presence, shift in rows:
+        work_secs = int(work_value or 0)
+        productive_secs = int(productive_value or 0)
+        meeting_secs = int(meeting_value or 0)
+        score = round((productive_secs / work_secs) * 100, 1) if work_secs else 0.0
         result.append(
             {
                 "id": employee.id,
@@ -176,7 +161,7 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
                 "email": employee.email,
                 "productivity_score": score,
                 "active_hours": round(work_secs / 3600, 2),
-                "meeting_hours": round(metrics["meeting"] / 3600, 2),
+                "meeting_hours": round(meeting_secs / 3600, 2),
                 "last_ping": presence.last_seen.isoformat() if presence else None,
                 "current_state": presence.state if presence else "offline",
                 "current_app": presence.app_name if presence else None,
