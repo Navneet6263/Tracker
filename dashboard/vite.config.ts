@@ -2,6 +2,11 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // AWS/PM2 runs a Node server. Lovable defaults to a Cloudflare worker build,
+  // which cannot be started by Vite preview on the EC2 host.
+  nitro: {
+    preset: "node-server",
+  },
   vite: {
     server: {
       allowedHosts: true,
