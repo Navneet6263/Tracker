@@ -7,6 +7,7 @@ import { ChangePasswordDialog } from "@/components/dashboard/ChangePasswordDialo
 import { EmployeeTable } from "@/components/dashboard/EmployeeTable";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { TimeSavingsBanner } from "@/components/dashboard/TimeSavingsBanner";
+import { WorkDeclines } from "@/components/dashboard/WorkDeclines";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { getPingStatus, useLiveSignals, useSummary } from "@/hooks/useRealData";
 import { AuthGuard } from "@/lib/auth-guard";
@@ -146,6 +147,7 @@ function DashboardContent() {
         </div>
 
         <div id="employees" className="scroll-mt-24">
+          <div className="mb-6"><WorkDeclines /></div>
           <EmployeeTable employees={employees} liveSignals={liveSignals} />
         </div>
 

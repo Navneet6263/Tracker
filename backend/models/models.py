@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, UniqueConstraint, UnicodeText
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from database import Base
@@ -105,3 +105,58 @@ class AgentCommand(Base):
     command = Column(String(50), nullable=False)
     created_at = Column(DateTime, nullable=False, default=utcnow_naive)
     delivered_at = Column(DateTime, nullable=True)
+
+
+class TrackerDevice(Base):
+    __tablename__ = "tracker_devices"
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False)
+    credential_hash = Column(String(64), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False)
+
+
+class ExternalIdentity(Base):
+    __tablename__ = "external_identities"
+    # SHA256 of issuer + subject avoids SQL Server index width limits.
+    identity_key = Column(String(64), primary_key=True)
+    provider = Column(String(30), nullable=False)
+    subject = Column(String(255), nullable=False)
+    issuer = Column(String(512), nullable=False)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+
+
+class WorkSession(Base):
+    __tablename__ = "work_sessions"
+    id = Column(String(36), primary_key=True)
+    device_id = Column(String(36), ForeignKey("tracker_devices.id"), nullable=False, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    windows_user = Column(String(255), nullable=False)
+    started_at = Column(DateTime, default=utcnow_naive, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    ended_at = Column(DateTime, nullable=True)
+
+
+class WorkLogin(Base):
+    __tablename__ = "work_logins"
+    id = Column(String(36), primary_key=True)
+    device_id = Column(String(36), ForeignKey("tracker_devices.id"), nullable=False, index=True)
+    provider = Column(String(30), nullable=False)
+    state_hash = Column(String(64), unique=True, nullable=False)
+    verifier = Column(String(128), nullable=False)
+    nonce = Column(String(128), nullable=False)
+    windows_user = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    claimed = Column(Boolean, default=False, nullable=False)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    session_id = Column(String(36), ForeignKey("work_sessions.id"), nullable=True)
+
+
+class WorkDecline(Base):
+    __tablename__ = "work_declines"
+    # Not a FK to expiring work_logins: keep the submitted audit after pruning.
+    login_id = Column(String(36), primary_key=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    device_id = Column(String(36), ForeignKey("tracker_devices.id"), nullable=False)
+    reason = Column(UnicodeText, nullable=False)
+    created_at = Column(DateTime, default=utcnow_naive, nullable=False, index=True)

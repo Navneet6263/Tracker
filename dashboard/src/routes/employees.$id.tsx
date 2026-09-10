@@ -16,6 +16,7 @@ import { AppUsageDetail } from "@/components/dashboard/AppUsageDetail";
 import { OfflineTimeline } from "@/components/dashboard/OfflineTimeline";
 import { PageUsageTable } from "@/components/dashboard/PageUsageTable";
 import { StatusPing } from "@/components/dashboard/StatusPing";
+import { WorkSessionHistory } from "@/components/dashboard/WorkSessionHistory";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { formatPing, getPingStatus, useEmployeeDetail } from "@/hooks/useRealData";
 import { AuthGuard } from "@/lib/auth-guard";
@@ -107,7 +108,7 @@ function EmployeeDetailContent() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <span className="flex items-center gap-1">
-                    <Mail className="h-3 w-3" /> {employee.email}
+                    <Mail className="h-3 w-3" /> {employee.identity_mode === "work_account" ? "Verified Microsoft / work account" : employee.email}
                   </span>
                   <span>·</span>
                   <span>{formatPing(employee.last_ping)}</span>
@@ -156,6 +157,8 @@ function EmployeeDetailContent() {
           <MiniStat icon={Clock} label="Passive work" value={`${analytics.passive_mins}m`} />
           <MiniStat icon={Clock} label="Idle" value={`${analytics.idle_mins}m`} />
         </div>
+
+        {employee.identity_mode === "work_account" && <WorkSessionHistory employeeId={employeeId} />}
 
         <AppUsageDetail
           breakdown={analytics.app_breakdown}

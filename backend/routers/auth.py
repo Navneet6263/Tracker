@@ -106,6 +106,7 @@ def device_login(
         matching_users = [
             employee
             for employee in candidates
+            if not employee.email.endswith("@identity.invalid")
             if employee.email.partition("@")[0].strip().lower() == clean_user
         ]
         if len(matching_users) == 1:

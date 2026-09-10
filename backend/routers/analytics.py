@@ -165,6 +165,8 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
                 "last_ping": presence.last_seen.isoformat() if presence else None,
                 "current_state": presence.state if presence else "offline",
                 "current_app": presence.app_name if presence else None,
+                "current_device": presence.device_name if presence else None,
+                "identity_mode": "work_account" if employee.email.endswith("@identity.invalid") else "windows_profile",
                 "shift": serialize_shift(shift),
             }
         )

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from sqlalchemy import text
 from database import engine, Base
 from models import models  # Import models before create_all
-from routers import activity, auth, events, analytics, ws
+from routers import activity, auth, events, analytics, ws, work
 
 load_dotenv()
 Base.metadata.create_all(bind=engine)
@@ -34,6 +34,7 @@ app.include_router(activity.router)
 app.include_router(events.router)
 app.include_router(analytics.router)
 app.include_router(ws.router)
+app.include_router(work.router)
 
 @app.get("/health")
 def health():

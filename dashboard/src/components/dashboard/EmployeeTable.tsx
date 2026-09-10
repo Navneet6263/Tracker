@@ -76,11 +76,14 @@ export function EmployeeTable({ employees, liveSignals = {} }: Props) {
                       </div>
                       <div>
                         <p className="font-medium text-slate-900">{e.name}</p>
-                        <p className="text-xs text-slate-500">{e.email}</p>
+                        <p className="text-xs text-slate-500">
+                          {e.identity_mode === "work_account" ? "Verified work account" : e.email}
+                        </p>
+                        {e.current_device && <p className="text-xs text-slate-500">PC: {e.current_device}</p>}
                         <p className="mt-0.5 text-[11px] text-indigo-600">
                           {e.shift
                             ? `${e.shift.name} · ${e.shift.start}–${e.shift.end}`
-                            : "Learning shift · needs 2 working days"}
+                            : e.identity_mode === "work_account" ? "Rotating work sessions" : "Learning shift · needs 2 working days"}
                         </p>
                       </div>
                     </div>

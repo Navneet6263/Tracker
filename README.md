@@ -114,6 +114,11 @@ an employee token cannot open it.
 
 ## Windows agent and installer
 
+For shared Windows accounts / rotating staff, use the separate v3 Microsoft
+work-session agent. See [Microsoft shared-PC setup and pilot checklist](docs/SHARED_PC_MICROSOFT.md).
+It requires company Entra configuration and the new shared installer; the legacy
+EXE below continues its Windows-profile identification flow.
+
 Build both executables:
 
 ```powershell

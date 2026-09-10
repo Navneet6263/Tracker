@@ -58,6 +58,31 @@ export function fetchSummary() {
   return apiFetch<EmployeeSummary[]>("/analytics/summary");
 }
 
+export interface WorkSessionHistory {
+  id: string;
+  device_name: string;
+  started_at: string;
+  ended_at: string | null;
+  expires_at: string;
+}
+
+export function fetchWorkSessions(employeeId: number) {
+  return apiFetch<WorkSessionHistory[]>(`/work/employees/${employeeId}/sessions`);
+}
+
+export interface WorkDecline {
+  id: string;
+  employee_id: number;
+  employee_name: string;
+  device_name: string;
+  reason: string;
+  created_at: string;
+}
+
+export function fetchWorkDeclines() {
+  return apiFetch<WorkDecline[]>("/work/declines");
+}
+
 export function fetchEmployeeAnalytics(id: number, period = "day") {
   return apiFetch<EmployeeAnalytics>(`/analytics/employee/${id}?period=${period}`);
 }
@@ -97,6 +122,8 @@ export function getWsUrl(path: string): string {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface EmployeeSummary {
+  current_device?: string | null;
+  identity_mode?: "work_account" | "windows_profile";
   id: number;
   name: string;
   email: string;

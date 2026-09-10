@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.models import ActivityInterval, Employee, ShiftAssignment
+from models.models import ActivityInterval, Employee, ShiftAssignment, ExternalIdentity
 from routers.ws import broadcast_to_admins
 from services.auth import get_current_user
 from services.productivity import classify
@@ -77,6 +77,11 @@ async def ingest_activity(
         )
         .first()
     )
+    shared_employee = db.query(ExternalIdentity).filter_by(employee_id=user.id).first() is not None
+    # Rotating staff are not permanently pinned to an inferred day/night shift.
+    # Explicit administrator assignments still apply.
+    if shared_employee and assigned_shift and assigned_shift.shift_name.endswith(" (Auto)"):
+        assigned_shift = None
 
     seen_ids = set(existing_ids)
     for sample in req.samples:
@@ -129,7 +134,8 @@ async def ingest_activity(
     db.commit()
 
     try:
-        infer_shift_assignment(db, user.id)
+        if not shared_employee:
+            infer_shift_assignment(db, user.id)
     except Exception:
         db.rollback()
         LOGGER.exception("Automatic shift inference failed for employee_id=%s", user.id)
