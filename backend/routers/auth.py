@@ -94,13 +94,14 @@ def device_login(
     req: DeviceLoginRequest,
     db: Session = Depends(get_db),
 ):
+    from sqlalchemy import func
     clean_user = req.username.strip().lower()
     clean_host = req.hostname.strip().lower()
 
-    # Dynamic multi-user seat sharing: if client detected an active employee email (from Teams/Keka)
+    # 1. Dynamic multi-user seat sharing: if client detected an active employee email (from Teams/Keka)
     if req.detected_email and "@" in req.detected_email:
         clean_email = req.detected_email.strip().lower()
-        user = db.query(Employee).filter(Employee.email == clean_email, Employee.is_active.is_(True)).first()
+        user = db.query(Employee).filter(func.lower(Employee.email) == clean_email, Employee.is_active.is_(True)).first()
         if not user:
             display_name = req.detected_name.strip() if req.detected_name else clean_email.split("@")[0].replace(".", " ").title()
             try:
@@ -114,9 +115,9 @@ def device_login(
                 db.add(user)
                 db.commit()
                 LOGGER.info("Auto-enrolled new employee from Teams/Keka: %s (%s)", clean_email, display_name)
-            except IntegrityError:
+            except Exception:
                 db.rollback()
-                user = db.query(Employee).filter(Employee.email == clean_email).first()
+                user = db.query(Employee).filter(func.lower(Employee.email) == clean_email).first()
 
         if user and user.is_active:
             shift = db.query(ShiftAssignment).filter(
@@ -134,109 +135,37 @@ def device_login(
                 "shift": serialize_shift(shift),
             }
 
-    identity, user = _load_identity_user(db, clean_host, clean_user)
-    identity_changed = False
-    if identity is not None:
-        if identity.windows_sid and req.windows_sid and identity.windows_sid != req.windows_sid:
-            raise HTTPException(status_code=403, detail="Windows profile identity does not match")
-    else:
-        candidates = (
-            db.query(Employee)
-            .filter(Employee.role == "employee", Employee.is_active == 1)
-            .all()
-        )
-        matching_users = [
-            employee
-            for employee in candidates
-            if not employee.email.endswith("@identity.invalid")
-            if employee.email.partition("@")[0].strip().lower() == clean_user
-        ]
-        if len(matching_users) == 1:
-            user = matching_users[0]
-            identity = WindowsIdentity(
-                employee_id=user.id,
-                windows_sid=req.windows_sid,
-                hostname=clean_host,
-                username=clean_user,
-            )
-            db.add(identity)
-            identity_changed = True
-            LOGGER.info(
-                "Auto-bound Windows profile %s\\%s to employee_id=%s",
-                clean_host,
-                clean_user,
-                user.id,
-            )
-        elif len(matching_users) == 0 and _device_auto_enrollment_enabled():
-            if not req.windows_sid:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Windows SID is required for automatic enrollment",
-                )
-            try:
-                user = Employee(
-                    name=_auto_employee_name(clean_host, clean_user),
-                    email=_auto_employee_email(clean_host, clean_user),
-                    hashed_password=hash_password(secrets.token_urlsafe(32)),
-                    role="employee",
-                    is_active=True,
-                )
-                db.add(user)
-                db.flush()
-                identity = WindowsIdentity(
-                    employee_id=user.id,
-                    windows_sid=req.windows_sid,
-                    hostname=clean_host,
-                    username=clean_user,
-                )
-                db.add(identity)
-                db.commit()
-                LOGGER.warning(
-                    "Auto-enrolled Windows profile %s\\%s as employee_id=%s",
-                    clean_host,
-                    clean_user,
-                    user.id,
-                )
-            except IntegrityError:
-                # Concurrent startup attempts for the same Windows profile may
-                # race. Reuse the row committed by the first request.
-                db.rollback()
-                identity, user = _load_identity_user(db, clean_host, clean_user)
-                if identity is None or user is None:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Windows profile enrollment conflicted; retry shortly",
-                    )
-        else:
-            LOGGER.warning(
-                "Unassigned Windows profile rejected: %s\\%s matching_employees=%s",
-                clean_host,
-                clean_user,
-                len(matching_users),
-            )
-            raise HTTPException(
-                status_code=403,
-                detail="No unique employee email matches the Windows username",
-            )
+    # 2. Windows Profile / Device Identity Resolution
+    auto_email = _auto_employee_email(clean_host, clean_user)
+    user = db.query(Employee).filter(
+        (func.lower(Employee.email) == auto_email) | 
+        (func.lower(Employee.email).like(f"{clean_user}@%")),
+        Employee.is_active.is_(True)
+    ).first()
 
-    if not user or not user.is_active or user.role != "employee":
-        raise HTTPException(status_code=403, detail="Employee is inactive or invalid")
-    if not identity.windows_sid and req.windows_sid:
-        identity.windows_sid = req.windows_sid
-        identity_changed = True
-    if identity_changed:
+    if not user:
         try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="Windows SID is already assigned to another profile",
+            display_name = _auto_employee_name(clean_host, clean_user)
+            user = Employee(
+                name=display_name,
+                email=auto_email,
+                hashed_password=hash_password(secrets.token_urlsafe(32)),
+                role="employee",
+                is_active=True,
             )
+            db.add(user)
+            db.commit()
+            LOGGER.info("Auto-enrolled Windows profile %s\\%s as employee_id=%s", clean_host, clean_user, user.id)
+        except Exception:
+            db.rollback()
+            user = db.query(Employee).filter(func.lower(Employee.email) == auto_email).first()
+
+    if not user:
+        raise HTTPException(status_code=403, detail="Could not resolve or enroll employee")
 
     shift = db.query(ShiftAssignment).filter(
         ShiftAssignment.employee_id == user.id,
-        ShiftAssignment.enabled == 1,
+        ShiftAssignment.enabled.is_(True),
     ).first()
 
     token = create_token({"sub": user.email, "role": user.role, "id": user.id})
@@ -246,6 +175,7 @@ def device_login(
         "role": user.role,
         "id": user.id,
         "name": user.name,
+        "email": user.email,
         "shift": serialize_shift(shift),
     }
 
