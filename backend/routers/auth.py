@@ -98,54 +98,78 @@ def device_login(
     clean_user = req.username.strip().lower()
     clean_host = req.hostname.strip().lower()
 
-    # 1. Dynamic multi-user seat sharing: if client detected an active employee email (from Teams/Keka)
-    if req.detected_email and "@" in req.detected_email:
-        clean_email = req.detected_email.strip().lower()
-        user = db.query(Employee).filter(func.lower(Employee.email) == clean_email, Employee.is_active.is_(True)).first()
+    try:
+        # 1. Dynamic multi-user seat sharing: if client detected an active employee email (from Teams/Keka)
+        if req.detected_email and "@" in req.detected_email:
+            clean_email = req.detected_email.strip().lower()
+            user = db.query(Employee).filter(func.lower(Employee.email) == clean_email, Employee.is_active.is_(True)).first()
+            if not user:
+                display_name = req.detected_name.strip() if req.detected_name else clean_email.split("@")[0].replace(".", " ").title()
+                try:
+                    user = Employee(
+                        name=display_name,
+                        email=clean_email,
+                        hashed_password=hash_password(secrets.token_urlsafe(32)),
+                        role="employee",
+                        is_active=True,
+                    )
+                    db.add(user)
+                    db.commit()
+                    LOGGER.info("Auto-enrolled new employee from Teams/Keka: %s (%s)", clean_email, display_name)
+                except Exception:
+                    db.rollback()
+                    user = db.query(Employee).filter(func.lower(Employee.email) == clean_email).first()
+
+            if user and user.is_active:
+                shift_data = None
+                try:
+                    shift = db.query(ShiftAssignment).filter(
+                        ShiftAssignment.employee_id == user.id,
+                        ShiftAssignment.enabled.is_(True),
+                    ).first()
+                    shift_data = serialize_shift(shift)
+                except Exception:
+                    db.rollback()
+
+                token = create_token({"sub": user.email, "role": user.role, "id": user.id})
+                return {
+                    "access_token": token,
+                    "token_type": "bearer",
+                    "role": user.role,
+                    "id": user.id,
+                    "name": user.name,
+                    "email": user.email,
+                    "shift": shift_data,
+                }
+
+        # 2. Windows Profile / Device Identity Resolution
+        auto_email = _auto_employee_email(clean_host, clean_user)
+        user = db.query(Employee).filter(
+            (func.lower(Employee.email) == auto_email) | 
+            (func.lower(Employee.email).like(f"{clean_user}@%")),
+            Employee.is_active.is_(True)
+        ).first()
+
         if not user:
-            display_name = req.detected_name.strip() if req.detected_name else clean_email.split("@")[0].replace(".", " ").title()
             try:
+                display_name = _auto_employee_name(clean_host, clean_user)
                 user = Employee(
                     name=display_name,
-                    email=clean_email,
+                    email=auto_email,
                     hashed_password=hash_password(secrets.token_urlsafe(32)),
                     role="employee",
                     is_active=True,
                 )
                 db.add(user)
                 db.commit()
-                LOGGER.info("Auto-enrolled new employee from Teams/Keka: %s (%s)", clean_email, display_name)
+                LOGGER.info("Auto-enrolled Windows profile %s\\%s as employee_id=%s", clean_host, clean_user, user.id)
             except Exception:
                 db.rollback()
-                user = db.query(Employee).filter(func.lower(Employee.email) == clean_email).first()
+                user = db.query(Employee).filter(func.lower(Employee.email) == auto_email).first()
 
-        if user and user.is_active:
-            shift = db.query(ShiftAssignment).filter(
-                ShiftAssignment.employee_id == user.id,
-                ShiftAssignment.enabled.is_(True),
-            ).first()
-            token = create_token({"sub": user.email, "role": user.role, "id": user.id})
-            return {
-                "access_token": token,
-                "token_type": "bearer",
-                "role": user.role,
-                "id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "shift": serialize_shift(shift),
-            }
-
-    # 2. Windows Profile / Device Identity Resolution
-    auto_email = _auto_employee_email(clean_host, clean_user)
-    user = db.query(Employee).filter(
-        (func.lower(Employee.email) == auto_email) | 
-        (func.lower(Employee.email).like(f"{clean_user}@%")),
-        Employee.is_active.is_(True)
-    ).first()
-
-    if not user:
-        try:
-            display_name = _auto_employee_name(clean_host, clean_user)
+        if not user:
+            # Absolute fallback
+            display_name = f"{clean_user.title()} ({clean_host})"
             user = Employee(
                 name=display_name,
                 email=auto_email,
@@ -155,29 +179,31 @@ def device_login(
             )
             db.add(user)
             db.commit()
-            LOGGER.info("Auto-enrolled Windows profile %s\\%s as employee_id=%s", clean_host, clean_user, user.id)
+
+        shift_data = None
+        try:
+            shift = db.query(ShiftAssignment).filter(
+                ShiftAssignment.employee_id == user.id,
+                ShiftAssignment.enabled.is_(True),
+            ).first()
+            shift_data = serialize_shift(shift)
         except Exception:
             db.rollback()
-            user = db.query(Employee).filter(func.lower(Employee.email) == auto_email).first()
 
-    if not user:
-        raise HTTPException(status_code=403, detail="Could not resolve or enroll employee")
-
-    shift = db.query(ShiftAssignment).filter(
-        ShiftAssignment.employee_id == user.id,
-        ShiftAssignment.enabled.is_(True),
-    ).first()
-
-    token = create_token({"sub": user.email, "role": user.role, "id": user.id})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "role": user.role,
-        "id": user.id,
-        "name": user.name,
-        "email": user.email,
-        "shift": serialize_shift(shift),
-    }
+        token = create_token({"sub": user.email, "role": user.role, "id": user.id})
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "role": user.role,
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "shift": shift_data,
+        }
+    except Exception as exc:
+        LOGGER.exception("Fatal error in device_login: %s", exc)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 class ChangePasswordRequest(BaseModel):
