@@ -102,7 +102,7 @@ def device_login(
         # 1. Dynamic multi-user seat sharing: if client detected an active employee email (from Teams/Keka)
         if req.detected_email and "@" in req.detected_email:
             clean_email = req.detected_email.strip().lower()
-            user = db.query(Employee).filter(func.lower(Employee.email) == clean_email, Employee.is_active.is_(True)).first()
+            user = db.query(Employee).filter(func.lower(Employee.email) == clean_email, Employee.is_active == True).first()
             if not user:
                 display_name = req.detected_name.strip() if req.detected_name else clean_email.split("@")[0].replace(".", " ").title()
                 try:
@@ -125,7 +125,7 @@ def device_login(
                 try:
                     shift = db.query(ShiftAssignment).filter(
                         ShiftAssignment.employee_id == user.id,
-                        ShiftAssignment.enabled.is_(True),
+                        ShiftAssignment.enabled == True,
                     ).first()
                     shift_data = serialize_shift(shift)
                 except Exception:
@@ -147,7 +147,7 @@ def device_login(
         user = db.query(Employee).filter(
             (func.lower(Employee.email) == auto_email) | 
             (func.lower(Employee.email).like(f"{clean_user}@%")),
-            Employee.is_active.is_(True)
+            Employee.is_active == True
         ).first()
 
         if not user:
@@ -184,7 +184,7 @@ def device_login(
         try:
             shift = db.query(ShiftAssignment).filter(
                 ShiftAssignment.employee_id == user.id,
-                ShiftAssignment.enabled.is_(True),
+                ShiftAssignment.enabled == True,
             ).first()
             shift_data = serialize_shift(shift)
         except Exception:
