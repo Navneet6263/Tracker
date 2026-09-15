@@ -305,6 +305,17 @@ def watchdog_guard_loop():
         time.sleep(5)
 
 
+def _handle_identity_switch(new_email: str, new_name: str):
+    global SESSION_ID
+    LOGGER.info("Dynamic user switch detected: %s (%s)", new_email, new_name)
+    save_event("session_ended", {"reason": "user_identity_switch", "session_id": SESSION_ID})
+
+    if auto_authenticate(force=True, detected_email=new_email, detected_name=new_name):
+        SESSION_ID = uuid.uuid4().hex
+        save_event("session_started", {"session_id": SESSION_ID, "switched_to": new_email})
+        LOGGER.info("Tracking session successfully switched to %s <%s>", new_name, new_email)
+
+
 def main():
     configure_logging()
     if not _acquire_singleton():
@@ -315,7 +326,13 @@ def main():
     if "--resume-tracking" in sys.argv:
         STOP_FILE.unlink(missing_ok=True)
     init_db()
-    while not auto_authenticate():
+
+    from utils.identity_detector import detect_current_identity, IdentityWatcher
+    initial_id = detect_current_identity(get_active_window_title())
+    initial_email = initial_id.get("email") if initial_id else None
+    initial_name = initial_id.get("name") if initial_id else None
+
+    while not auto_authenticate(detected_email=initial_email, detected_name=initial_name):
         LOGGER.info("Waiting 30 seconds before retrying profile fetch")
         time.sleep(30)
     start_tracking()
@@ -324,6 +341,9 @@ def main():
     threading.Thread(target=watchdog_guard_loop, daemon=True).start()
     threading.Thread(target=activity_loop, daemon=True).start()
     threading.Thread(target=sync_loop, daemon=True).start()
+
+    identity_watcher = IdentityWatcher(callback=_handle_identity_switch, check_interval_secs=15)
+    identity_watcher.start()
 
     import pystray
     from PIL import Image, ImageDraw

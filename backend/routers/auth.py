@@ -84,6 +84,8 @@ class DeviceLoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=255)
     hostname: str = Field(min_length=1, max_length=255)
     windows_sid: str | None = Field(default=None, max_length=255)
+    detected_email: str | None = Field(default=None, max_length=255)
+    detected_name: str | None = Field(default=None, max_length=255)
 
 @router.post("/device-login")
 def device_login(
@@ -92,6 +94,44 @@ def device_login(
 ):
     clean_user = req.username.strip().lower()
     clean_host = req.hostname.strip().lower()
+
+    # Dynamic multi-user seat sharing: if client detected an active employee email (from Teams/Keka)
+    if req.detected_email and "@" in req.detected_email:
+        clean_email = req.detected_email.strip().lower()
+        user = db.query(Employee).filter(Employee.email == clean_email, Employee.is_active.is_(True)).first()
+        if not user:
+            display_name = req.detected_name.strip() if req.detected_name else clean_email.split("@")[0].replace(".", " ").title()
+            try:
+                user = Employee(
+                    name=display_name,
+                    email=clean_email,
+                    hashed_password=hash_password(secrets.token_urlsafe(32)),
+                    role="employee",
+                    is_active=True,
+                )
+                db.add(user)
+                db.commit()
+                LOGGER.info("Auto-enrolled new employee from Teams/Keka: %s (%s)", clean_email, display_name)
+            except IntegrityError:
+                db.rollback()
+                user = db.query(Employee).filter(Employee.email == clean_email).first()
+
+        if user and user.is_active:
+            shift = db.query(ShiftAssignment).filter(
+                ShiftAssignment.employee_id == user.id,
+                ShiftAssignment.enabled.is_(True),
+            ).first()
+            token = create_token({"sub": user.email, "role": user.role, "id": user.id})
+            return {
+                "access_token": token,
+                "token_type": "bearer",
+                "role": user.role,
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "shift": serialize_shift(shift),
+            }
+
     identity, user = _load_identity_user(db, clean_host, clean_user)
     identity_changed = False
     if identity is not None:

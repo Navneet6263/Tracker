@@ -56,14 +56,19 @@ def get_headers() -> dict:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
-def auto_authenticate(force: bool = False) -> bool:
-    if get_employee_token() and not force:
+def auto_authenticate(force: bool = False, detected_email: str = None, detected_name: str = None) -> bool:
+    if get_employee_token() and not force and not detected_email:
         return True
     identity = get_windows_identity()
+    payload = dict(identity)
+    if detected_email:
+        payload["detected_email"] = detected_email
+    if detected_name:
+        payload["detected_name"] = detected_name
     try:
         response = HTTP.post(
             f"{get_server_url()}/auth/device-login",
-            json=identity,
+            json=payload,
             timeout=10,
         )
         if response.status_code != 200:
@@ -86,14 +91,16 @@ def auto_authenticate(force: bool = False) -> bool:
                 "token": data["access_token"],
                 "employee_id": data["id"],
                 "employee_name": data["name"],
+                "employee_email": data.get("email", detected_email or ""),
                 "identity": identity,
                 "shift": data.get("shift"),
             }
         )
         LOGGER.info(
-            "Profile connected: employee_id=%s name=%s identity=%s\\%s",
+            "Profile connected: employee_id=%s name=%s email=%s identity=%s\\%s",
             data["id"],
             data["name"],
+            data.get("email", ""),
             identity["hostname"],
             identity["username"],
         )
