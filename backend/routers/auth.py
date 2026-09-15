@@ -67,7 +67,9 @@ def _load_identity_user(db: Session, hostname: str, username: str):
 
 @router.post("/login")
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(Employee).filter(Employee.email == form.username).first()
+    clean_username = form.username.strip().lower()
+    from sqlalchemy import func
+    user = db.query(Employee).filter(func.lower(Employee.email) == clean_username).first()
     if not user or not user.is_active or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if password_hash_needs_rehash(user.hashed_password):

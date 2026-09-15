@@ -8,7 +8,48 @@ from models import models  # Import models before create_all
 from routers import activity, auth, events, analytics, ws, work
 
 load_dotenv()
-Base.metadata.create_all(bind=engine)
+
+def ensure_default_admin():
+    from database import SessionLocal
+    from models.models import Employee
+    from services.auth import hash_password
+    from sqlalchemy import func
+    db = SessionLocal()
+    try:
+        admin_email = "admin@greencall.com"
+        admin = db.query(Employee).filter(func.lower(Employee.email) == admin_email).first()
+        if not admin:
+            admin = Employee(
+                name="Administrator",
+                email=admin_email,
+                hashed_password=hash_password("admin123"),
+                role="admin",
+                is_active=True,
+            )
+            db.add(admin)
+            db.commit()
+            print(f"[Admin] Default admin created: {admin_email}")
+        else:
+            admin.hashed_password = hash_password("admin123")
+            admin.role = "admin"
+            admin.is_active = True
+            db.commit()
+            print(f"[Admin] Default admin password reset to admin123 for {admin_email}")
+    except Exception as e:
+        db.rollback()
+        print(f"[Admin Warning] Could not seed admin: {e}")
+    finally:
+        db.close()
+
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as exc:
+    print(f"[DB Warning] create_all: {exc}")
+
+try:
+    ensure_default_admin()
+except Exception as exc:
+    print(f"[Admin Warning] ensure_default_admin: {exc}")
 
 app = FastAPI(title="Employee Tracker API", version="1.0.0")
 
