@@ -50,6 +50,11 @@ def create_token(data: dict) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
+import time
+
+_USER_CACHE: dict[str, tuple[float, Employee]] = {}
+_USER_CACHE_TTL = 30.0  # 30 seconds cache to avoid cross-datacenter DB latency on every API hit
+
 def get_user_from_token(token: str, db: Session) -> Employee:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -59,9 +64,16 @@ def get_user_from_token(token: str, db: Session) -> Employee:
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
+    now = time.time()
+    cached = _USER_CACHE.get(email)
+    if cached and (now - cached[0]) < _USER_CACHE_TTL:
+        return cached[1]
+
     user = db.query(Employee).filter(Employee.email == email).first()
     if not user or not user.is_active:
+        _USER_CACHE.pop(email, None)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is inactive or missing")
+    _USER_CACHE[email] = (now, user)
     return user
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> Employee:

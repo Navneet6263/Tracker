@@ -41,10 +41,30 @@ def ensure_default_admin():
     finally:
         db.close()
 
+def ensure_indexes():
+    """Create composite indexes on SQL Server for high-performance analytics."""
+    queries = [
+        "CREATE NONCLUSTERED INDEX idx_activity_emp_start ON activity_intervals(employee_id, started_at)",
+        "CREATE NONCLUSTERED INDEX idx_activity_started_at ON activity_intervals(started_at)",
+        "CREATE NONCLUSTERED INDEX idx_events_emp_time ON system_events(employee_id, occurred_at)",
+    ]
+    with engine.connect() as conn:
+        for q in queries:
+            try:
+                conn.execute(text(q))
+                conn.commit()
+            except Exception:
+                pass
+
 try:
     Base.metadata.create_all(bind=engine)
 except Exception as exc:
     print(f"[DB Warning] create_all: {exc}")
+
+try:
+    ensure_indexes()
+except Exception as exc:
+    print(f"[DB Warning] ensure_indexes: {exc}")
 
 try:
     ensure_default_admin()

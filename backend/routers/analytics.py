@@ -92,12 +92,24 @@ def _date_range(period: str):
     return now - timedelta(hours=24)
 
 
+import time
+
+_SUMMARY_CACHE: dict = {"data": None, "ts": 0.0}
+SUMMARY_CACHE_TTL = 3.0  # 3 seconds cache prevents parallel burst latency
+
+_EMPLOYEE_CACHE: dict = {}
+EMPLOYEE_CACHE_TTL = 3.0
+
+
 @router.get("/summary")
 def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin)):
+    now_ts = time.time()
+    if _SUMMARY_CACHE["data"] is not None and (now_ts - _SUMMARY_CACHE["ts"]) < SUMMARY_CACHE_TTL:
+        return _SUMMARY_CACHE["data"]
+
     since = _date_range("day")
     activity_totals = (
-        db.query(Employee)
-        .with_entities(
+        db.query(
             ActivityInterval.employee_id.label("employee_id"),
             func.sum(
                 case(
@@ -170,6 +182,8 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
                 "shift": serialize_shift(shift),
             }
         )
+    _SUMMARY_CACHE["data"] = result
+    _SUMMARY_CACHE["ts"] = now_ts
     return result
 
 
@@ -185,12 +199,29 @@ def employee_analytics(
     if period not in {"day", "week", "month"}:
         raise HTTPException(status_code=422, detail="Unsupported period")
 
+    now_ts = time.time()
+    cache_key = (employee_id, period)
+    cached = _EMPLOYEE_CACHE.get(cache_key)
+    if cached and (now_ts - cached[0]) < EMPLOYEE_CACHE_TTL:
+        return cached[1]
+
     since = _date_range(period)
     intervals = []
     shift = None
     try:
         intervals = (
-            db.query(ActivityInterval)
+            db.query(
+                ActivityInterval.state,
+                ActivityInterval.app_name,
+                ActivityInterval.domain,
+                ActivityInterval.category,
+                ActivityInterval.duration_secs,
+                ActivityInterval.keyboard_active_secs,
+                ActivityInterval.mouse_active_secs,
+                ActivityInterval.keyboard_events,
+                ActivityInterval.mouse_events,
+                ActivityInterval.started_at,
+            )
             .filter(
                 ActivityInterval.employee_id == employee_id,
                 ActivityInterval.started_at >= since,
@@ -250,7 +281,10 @@ def employee_analytics(
                 page_secs[page_key] = page_secs.get(page_key, 0) + interval.duration_secs
 
     events = (
-        db.query(SystemEvent)
+        db.query(
+            SystemEvent.event_type,
+            SystemEvent.occurred_at,
+        )
         .filter(
             SystemEvent.employee_id == employee_id,
             SystemEvent.occurred_at >= since,
@@ -263,7 +297,7 @@ def employee_analytics(
     )
     offline_periods = _pair_gap_events(events)
 
-    return {
+    response_data = {
         "productivity_score": round((productive_secs / work_secs) * 100, 1) if work_secs else 0.0,
         "active_hours": round(work_secs / 3600, 2),
         "keyboard_mins": round(keyboard_secs / 60, 1),
@@ -297,6 +331,8 @@ def employee_analytics(
         ][:30],
         "offline_periods": offline_periods,
     }
+    _EMPLOYEE_CACHE[cache_key] = (now_ts, response_data)
+    return response_data
 
 
 def _pair_gap_events(events: list[SystemEvent]) -> list[dict]:
