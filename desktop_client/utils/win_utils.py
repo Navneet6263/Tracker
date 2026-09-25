@@ -177,4 +177,3 @@ def detect_voip_call(window_title: str = "") -> str | None:
 
     call_words = re.search(r"\b(call|calling|dialer|meeting|huddle)\b", title)
     return title_provider if title_provider and call_words else title_provider
-
