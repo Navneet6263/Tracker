@@ -1,17 +1,23 @@
 from datetime import datetime, timedelta, timezone
 import re
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models.models import (
     ActivityInterval,
+    AgentCommand,
     Employee,
     EmployeePresence,
+    ExternalIdentity,
     ShiftAssignment,
     SystemEvent,
+    WindowsIdentity,
+    WorkDecline,
+    WorkLogin,
+    WorkSession,
 )
 from services.auth import get_current_user, require_admin
 from services.shifts import is_within_shift, serialize_shift
@@ -191,21 +197,71 @@ def summary(db: Session = Depends(get_db), _: Employee = Depends(require_admin))
 def employee_analytics(
     employee_id: int,
     period: str = "day",
+    date: str | None = Query(None, description="Target date YYYY-MM-DD or today/yesterday"),
+    start_date: str | None = Query(None, description="Start date YYYY-MM-DD"),
+    end_date: str | None = Query(None, description="End date YYYY-MM-DD"),
     db: Session = Depends(get_db),
     user: Employee = Depends(get_current_user),
 ):
     if user.role != "admin" and user.id != employee_id:
         raise HTTPException(status_code=403, detail="Forbidden")
-    if period not in {"day", "week", "month"}:
-        raise HTTPException(status_code=422, detail="Unsupported period")
+
+    now = _utcnow()
+    selected_date_str = None
+    effective_period = period
+
+    if date:
+        date_clean = date.strip().lower()
+        if date_clean == "today":
+            target_d = now.date()
+        elif date_clean == "yesterday":
+            target_d = now.date() - timedelta(days=1)
+        else:
+            try:
+                target_d = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid date format, expected YYYY-MM-DD")
+        since = datetime.combine(target_d, datetime.min.time())
+        until = datetime.combine(target_d, datetime.max.time())
+        selected_date_str = target_d.strftime("%Y-%m-%d")
+        effective_period = "day"
+    elif start_date and end_date:
+        try:
+            s_d = datetime.strptime(start_date.strip(), "%Y-%m-%d").date()
+            e_d = datetime.strptime(end_date.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid date range format, expected YYYY-MM-DD")
+        since = datetime.combine(s_d, datetime.min.time())
+        until = datetime.combine(e_d, datetime.max.time())
+        selected_date_str = f"{start_date} to {end_date}"
+        effective_period = "custom"
+    elif period == "yesterday":
+        target_d = now.date() - timedelta(days=1)
+        since = datetime.combine(target_d, datetime.min.time())
+        until = datetime.combine(target_d, datetime.max.time())
+        selected_date_str = target_d.strftime("%Y-%m-%d")
+        effective_period = "day"
+    elif period == "week":
+        since = now - timedelta(days=7)
+        until = now
+        effective_period = "week"
+    elif period == "month":
+        since = now - timedelta(days=30)
+        until = now
+        effective_period = "month"
+    else:  # "day" / "today"
+        target_d = now.date()
+        since = datetime.combine(target_d, datetime.min.time())
+        until = now
+        selected_date_str = target_d.strftime("%Y-%m-%d")
+        effective_period = "day"
 
     now_ts = time.time()
-    cache_key = (employee_id, period)
+    cache_key = (employee_id, effective_period, selected_date_str)
     cached = _EMPLOYEE_CACHE.get(cache_key)
     if cached and (now_ts - cached[0]) < EMPLOYEE_CACHE_TTL:
         return cached[1]
 
-    since = _date_range(period)
     intervals = []
     shift = None
     try:
@@ -221,16 +277,21 @@ def employee_analytics(
                 ActivityInterval.keyboard_events,
                 ActivityInterval.mouse_events,
                 ActivityInterval.started_at,
+                ActivityInterval.ended_at,
+                ActivityInterval.session_id,
+                ActivityInterval.device_name,
             )
             .filter(
                 ActivityInterval.employee_id == employee_id,
                 ActivityInterval.started_at >= since,
+                ActivityInterval.started_at <= until,
             )
             .order_by(ActivityInterval.started_at.asc())
             .all()
         )
     except Exception:
         db.rollback()
+
     try:
         shift = (
             db.query(ShiftAssignment)
@@ -243,6 +304,25 @@ def employee_analytics(
     except Exception:
         db.rollback()
 
+    hourly_slots = {
+        h: {
+            "hour": f"{h:02d}:00",
+            "hour_int": h,
+            "active_secs": 0,
+            "meeting_secs": 0,
+            "passive_secs": 0,
+            "idle_secs": 0,
+            "locked_secs": 0,
+            "keyboard_events": 0,
+            "mouse_events": 0,
+            "apps": {},
+        }
+        for h in range(24)
+    }
+
+    daily_groups: dict[str, dict] = {}
+    sessions_map: dict[str, dict] = {}
+
     app_secs: dict[tuple[str, str], int] = {}
     page_secs: dict[tuple[str, str], int] = {}
     state_secs: dict[str, int] = {}
@@ -252,25 +332,97 @@ def employee_analytics(
     mouse_secs = 0
     keyboard_events = 0
     mouse_events = 0
+
     for interval in intervals:
         effective_state = _effective_state(
             interval.state, interval.app_name, interval.domain
         )
-        if effective_state in WORK_STATES and not is_within_shift(
-            interval.started_at, shift
-        ):
-            effective_state = "off_shift"
         state_secs[effective_state] = (
             state_secs.get(effective_state, 0) + interval.duration_secs
         )
         if effective_state in WORK_STATES:
             work_secs += interval.duration_secs
-        if interval.category == "productive" and effective_state in WORK_STATES:
-            productive_secs += interval.duration_secs
+            if interval.category == "productive":
+                productive_secs += interval.duration_secs
+
         keyboard_secs += interval.keyboard_active_secs or 0
         mouse_secs += interval.mouse_active_secs or 0
         keyboard_events += interval.keyboard_events or 0
         mouse_events += interval.mouse_events or 0
+
+        # Hourly slot grouping
+        h = interval.started_at.hour
+        if 0 <= h <= 23:
+            slot = hourly_slots[h]
+            if effective_state == "meeting":
+                slot["meeting_secs"] += interval.duration_secs
+            elif effective_state == "active":
+                slot["active_secs"] += interval.duration_secs
+            elif effective_state == "passive":
+                slot["passive_secs"] += interval.duration_secs
+            elif effective_state == "idle":
+                slot["idle_secs"] += interval.duration_secs
+            elif effective_state == "locked":
+                slot["locked_secs"] += interval.duration_secs
+            slot["keyboard_events"] += interval.keyboard_events or 0
+            slot["mouse_events"] += interval.mouse_events or 0
+            if interval.app_name and effective_state in WORK_STATES:
+                app_disp = _display_app_name(interval.app_name)
+                slot["apps"][app_disp] = slot["apps"].get(app_disp, 0) + interval.duration_secs
+
+        # Daily grouping
+        d_key = interval.started_at.strftime("%Y-%m-%d")
+        if d_key not in daily_groups:
+            daily_groups[d_key] = {
+                "date": d_key,
+                "day_name": interval.started_at.strftime("%A"),
+                "work_secs": 0,
+                "productive_secs": 0,
+                "meeting_secs": 0,
+                "idle_secs": 0,
+                "locked_secs": 0,
+                "keyboard_events": 0,
+                "mouse_events": 0,
+                "apps": {},
+            }
+        dg = daily_groups[d_key]
+        if effective_state in WORK_STATES:
+            dg["work_secs"] += interval.duration_secs
+            if interval.category == "productive":
+                dg["productive_secs"] += interval.duration_secs
+            if interval.app_name:
+                app_disp = _display_app_name(interval.app_name)
+                dg["apps"][app_disp] = dg["apps"].get(app_disp, 0) + interval.duration_secs
+        elif effective_state == "meeting":
+            dg["meeting_secs"] += interval.duration_secs
+        elif effective_state == "idle":
+            dg["idle_secs"] += interval.duration_secs
+        elif effective_state == "locked":
+            dg["locked_secs"] += interval.duration_secs
+        dg["keyboard_events"] += interval.keyboard_events or 0
+        dg["mouse_events"] += interval.mouse_events or 0
+
+        # Session tracking
+        s_id = interval.session_id or "default_session"
+        if s_id not in sessions_map:
+            sessions_map[s_id] = {
+                "session_id": s_id,
+                "device_name": interval.device_name or "Windows Profile",
+                "started_at": interval.started_at,
+                "ended_at": interval.ended_at or interval.started_at,
+                "work_secs": 0,
+                "events_count": 0,
+            }
+        else:
+            if interval.started_at < sessions_map[s_id]["started_at"]:
+                sessions_map[s_id]["started_at"] = interval.started_at
+            if interval.ended_at and interval.ended_at > sessions_map[s_id]["ended_at"]:
+                sessions_map[s_id]["ended_at"] = interval.ended_at
+        if effective_state in WORK_STATES:
+            sessions_map[s_id]["work_secs"] += interval.duration_secs
+        sessions_map[s_id]["events_count"] += (interval.keyboard_events or 0) + (interval.mouse_events or 0)
+
+        # App & Page tracking
         if effective_state in WORK_STATES:
             app = _display_app_name(interval.app_name)
             key = (app, interval.category)
@@ -280,30 +432,106 @@ def employee_analytics(
                 page_key = (app, page_title)
                 page_secs[page_key] = page_secs.get(page_key, 0) + interval.duration_secs
 
-    events = (
-        db.query(
-            SystemEvent.event_type,
-            SystemEvent.occurred_at,
+    events = []
+    try:
+        events = (
+            db.query(
+                SystemEvent.event_type,
+                SystemEvent.occurred_at,
+            )
+            .filter(
+                SystemEvent.employee_id == employee_id,
+                SystemEvent.occurred_at >= since,
+                SystemEvent.occurred_at <= until,
+                SystemEvent.event_type.in_(
+                    ["went_offline", "came_online", "screen_locked", "screen_unlocked"]
+                ),
+            )
+            .order_by(SystemEvent.occurred_at.asc())
+            .all()
         )
-        .filter(
-            SystemEvent.employee_id == employee_id,
-            SystemEvent.occurred_at >= since,
-            SystemEvent.event_type.in_(
-                ["went_offline", "came_online", "screen_locked", "screen_unlocked"]
-            ),
-        )
-        .order_by(SystemEvent.occurred_at.asc())
-        .all()
-    )
+    except Exception:
+        db.rollback()
+
     offline_periods = _pair_gap_events(events)
 
+    hourly_timeline = []
+    for h in range(24):
+        slot = hourly_slots[h]
+        total_slot_activity = (
+            slot["active_secs"] + slot["meeting_secs"] + slot["passive_secs"] + slot["idle_secs"] + slot["locked_secs"]
+        )
+        top_app = max(slot["apps"].items(), key=lambda x: x[1])[0] if slot["apps"] else None
+        hourly_timeline.append({
+            "hour": slot["hour"],
+            "hour_int": h,
+            "active_mins": round(slot["active_secs"] / 60, 1),
+            "meeting_mins": round(slot["meeting_secs"] / 60, 1),
+            "passive_mins": round(slot["passive_secs"] / 60, 1),
+            "idle_mins": round(slot["idle_secs"] / 60, 1),
+            "locked_mins": round(slot["locked_secs"] / 60, 1),
+            "keyboard_events": slot["keyboard_events"],
+            "mouse_events": slot["mouse_events"],
+            "top_app": top_app,
+            "has_activity": total_slot_activity > 0,
+        })
+
+    daily_breakdown = []
+    for d_key, dg in sorted(daily_groups.items(), key=lambda x: x[0], reverse=True):
+        top_app = max(dg["apps"].items(), key=lambda x: x[1])[0] if dg["apps"] else None
+        w_s = dg["work_secs"]
+        p_s = dg["productive_secs"]
+        daily_breakdown.append({
+            "date": dg["date"],
+            "day_name": dg["day_name"],
+            "active_hours": round(w_s / 3600, 2),
+            "meeting_mins": round(dg["meeting_secs"] / 60, 1),
+            "idle_mins": round(dg["idle_mins"] / 60, 1),
+            "locked_mins": round(dg["locked_secs"] / 60, 1),
+            "productivity_score": round((p_s / w_s) * 100, 1) if w_s else 0.0,
+            "keyboard_events": dg["keyboard_events"],
+            "mouse_events": dg["mouse_events"],
+            "top_app": top_app,
+        })
+
+    work_sessions_list = []
+    for s_id, s_data in sorted(sessions_map.items(), key=lambda x: x[1]["started_at"], reverse=True):
+        work_sessions_list.append({
+            "session_id": s_id,
+            "device_name": s_data["device_name"],
+            "started_at": s_data["started_at"].isoformat(),
+            "ended_at": s_data["ended_at"].isoformat() if s_data["ended_at"] else None,
+            "active_hours": round(s_data["work_secs"] / 3600, 2),
+            "total_events": s_data["events_count"],
+        })
+
+    total_app_secs = sum(app_secs.values()) or 1
+    app_breakdown = [
+        {
+            "app": app,
+            "category": category,
+            "secs": seconds,
+            "hours": round(seconds / 3600, 2),
+            "percentage": round((seconds / total_app_secs) * 100, 1),
+        }
+        for (app, category), seconds in sorted(
+            app_secs.items(), key=lambda item: -item[1]
+        )[:35]
+    ]
+
     response_data = {
+        "selected_date": selected_date_str,
+        "effective_period": effective_period,
+        "since": since.isoformat(),
+        "until": until.isoformat(),
         "productivity_score": round((productive_secs / work_secs) * 100, 1) if work_secs else 0.0,
         "active_hours": round(work_secs / 3600, 2),
         "keyboard_mins": round(keyboard_secs / 60, 1),
         "mouse_mins": round(mouse_secs / 60, 1),
         "keyboard_events": keyboard_events,
         "mouse_events": mouse_events,
+        "keystrokes_per_hour": round(keyboard_events / (work_secs / 3600), 1) if work_secs else 0,
+        "clicks_per_hour": round(mouse_events / (work_secs / 3600), 1) if work_secs else 0,
         "meeting_mins": round(state_secs.get("meeting", 0) / 60, 1),
         "passive_mins": round(state_secs.get("passive", 0) / 60, 1),
         "idle_mins": round(state_secs.get("idle", 0) / 60, 1),
@@ -311,28 +539,73 @@ def employee_analytics(
         "state_breakdown": {
             state: round(seconds / 60, 1) for state, seconds in state_secs.items()
         },
-        "app_breakdown": [
-            {
-                "app": app,
-                "category": category,
-                "secs": seconds,
-                "hours": round(seconds / 3600, 2),
-            }
-            for (app, category), seconds in sorted(
-                app_secs.items(), key=lambda item: -item[1]
-            )[:20]
-        ],
+        "hourly_timeline": hourly_timeline,
+        "daily_breakdown": daily_breakdown,
+        "work_sessions": work_sessions_list,
+        "app_breakdown": app_breakdown,
         "page_breakdown": [
             {"app": app, "title": title, "secs": seconds}
             for (app, title), seconds in sorted(
                 page_secs.items(), key=lambda item: -item[1]
             )
             if seconds >= MIN_PAGE_SECONDS
-        ][:30],
+        ][:50],
         "offline_periods": offline_periods,
     }
     _EMPLOYEE_CACHE[cache_key] = (now_ts, response_data)
     return response_data
+
+
+
+@router.delete("/employee/{employee_id}")
+def delete_employee(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    admin: Employee = Depends(require_admin),
+):
+    if admin.id == employee_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own logged-in admin account")
+
+    target = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Employee profile not found")
+    if target.role == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete an administrator profile")
+
+    try:
+        # Delete dependent rows in child tables first to satisfy foreign key constraints
+        db.query(SystemEvent).filter(SystemEvent.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(ActivityInterval).filter(ActivityInterval.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(EmployeePresence).filter(EmployeePresence.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(ShiftAssignment).filter(ShiftAssignment.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(WindowsIdentity).filter(WindowsIdentity.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(AgentCommand).filter(AgentCommand.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(ExternalIdentity).filter(ExternalIdentity.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(WorkLogin).filter(WorkLogin.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(WorkSession).filter(WorkSession.employee_id == employee_id).delete(synchronize_session=False)
+        db.query(WorkDecline).filter(WorkDecline.employee_id == employee_id).delete(synchronize_session=False)
+
+        deleted_name = target.name
+        deleted_email = target.email
+        db.delete(target)
+        db.commit()
+
+        # Invalidate in-memory caches so UI updates instantly
+        _SUMMARY_CACHE["data"] = None
+        _SUMMARY_CACHE["ts"] = 0.0
+        for k in list(_EMPLOYEE_CACHE.keys()):
+            if k[0] == employee_id:
+                _EMPLOYEE_CACHE.pop(k, None)
+        try:
+            from services.auth import _USER_CACHE
+            _USER_CACHE.pop(deleted_email, None)
+        except Exception:
+            pass
+
+        return {"status": "success", "message": f"Profile for {deleted_name} permanently deleted"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete employee: {str(e)}")
 
 
 def _pair_gap_events(events: list[SystemEvent]) -> list[dict]:

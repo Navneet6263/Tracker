@@ -30,8 +30,8 @@ CHECK_INTERVAL = timedelta(minutes=15)
 AUTO_SUFFIX = " (Auto)"
 WORK_STATES = ("active", "passive", "meeting")
 SHIFT_DEFINITIONS = {
-    "Day": {"start": "09:00", "end": "18:00"},
-    "Night": {"start": "19:00", "end": "05:00"},
+    "Day Shift (9-6)": {"start": "09:00", "end": "18:00"},
+    "Night Shift (8-6)": {"start": "20:00", "end": "06:00"},
 }
 _last_check: dict[int, datetime] = {}
 
@@ -59,7 +59,7 @@ def _shift_for_time(local_time: time) -> str | None:
 
 
 def _work_date(local_datetime: datetime, shift_name: str) -> date:
-    if shift_name == "Night" and local_datetime.time() < _parse_time("05:00"):
+    if "Night" in shift_name and local_datetime.time() < _parse_time("12:00"):
         return (local_datetime - timedelta(days=1)).date()
     return local_datetime.date()
 

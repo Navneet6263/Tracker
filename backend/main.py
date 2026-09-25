@@ -42,16 +42,26 @@ def ensure_default_admin():
         db.close()
 
 def ensure_indexes():
-    """Create composite indexes on SQL Server for high-performance analytics."""
-    queries = [
-        "CREATE NONCLUSTERED INDEX idx_activity_emp_start ON activity_intervals(employee_id, started_at)",
-        "CREATE NONCLUSTERED INDEX idx_activity_started_at ON activity_intervals(started_at)",
-        "CREATE NONCLUSTERED INDEX idx_events_emp_time ON system_events(employee_id, occurred_at)",
+    """Create indexes for high-performance employee searches and analytics (supports SQLite and SQL Server)."""
+    dialect = engine.dialect.name
+    index_defs = [
+        ("idx_employees_name", "employees", "(name)"),
+        ("idx_employees_role_active", "employees", "(role, is_active)"),
+        ("idx_activity_emp_start", "activity_intervals", "(employee_id, started_at)"),
+        ("idx_activity_started_at", "activity_intervals", "(started_at)"),
+        ("idx_events_emp_time", "system_events", "(employee_id, occurred_at)"),
+        ("idx_presence_state", "employee_presences", "(state)"),
     ]
     with engine.connect() as conn:
-        for q in queries:
+        for idx_name, table, cols in index_defs:
             try:
-                conn.execute(text(q))
+                if dialect == "sqlite":
+                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}{cols}"))
+                else:
+                    check_sql = text(f"SELECT 1 FROM sys.indexes WHERE name = '{idx_name}'")
+                    res = conn.execute(check_sql).fetchone()
+                    if not res:
+                        conn.execute(text(f"CREATE NONCLUSTERED INDEX {idx_name} ON {table}{cols}"))
                 conn.commit()
             except Exception:
                 pass

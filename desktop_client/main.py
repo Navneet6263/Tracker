@@ -55,6 +55,33 @@ _mutex_handle = None
 _latest_state = "offline"
 _latest_app = None
 _watchdog_pid = None
+_is_session_active = False
+_active_email = None
+_active_name = None
+_shift_end_prompted_date = None
+_shift_dialog_open = False
+_current_tray_icon = None
+_session_started_at = None
+
+
+def trigger_checkout():
+    """Programmatically ends the current tracking session and unblocks tray icon."""
+    global _is_session_active, _current_tray_icon
+    LOGGER.info("Triggering checkout / end shift...")
+    _is_session_active = False
+    if _current_tray_icon:
+        try:
+            _current_tray_icon.stop()
+        except Exception as exc:
+            LOGGER.warning("Error stopping tray icon: %s", exc)
+
+
+# =========================================================================
+# AUTHENTICATION MODE CONFIGURATION:
+# "POPUP": Shows interactive Check-In dialog asking agent for official email.
+# "AUTO" : Automatically detects active user from Teams, Keka, and Chrome.
+# =========================================================================
+AUTH_MODE = "POPUP"
 
 
 def configure_logging():
@@ -100,6 +127,69 @@ def is_within_assigned_shift() -> bool:
         return local_now >= start or local_now <= end
     except Exception:
         return True
+
+
+def check_shift_end_and_notify():
+    """
+    Checks if the employee's shift has completed.
+    Instead of automatically cutting off tracking, prompts the employee with an interactive
+    dialog asking if they want to end their shift & check out, or continue working (overtime).
+    """
+    global _shift_end_prompted_date, _shift_dialog_open
+    if not _is_session_active or _shift_dialog_open:
+        return
+
+    shift = get_user_config().get("shift")
+    tz_name = shift.get("timezone", "Asia/Kolkata") if shift else "Asia/Kolkata"
+    shift_name = shift.get("name", "Day Shift (9-6)") if shift else "Day Shift (9-6)"
+    start_str = shift.get("start", "09:00") if shift else "09:00"
+    end_str = shift.get("end", "18:00") if shift else "18:00"
+
+    try:
+        now_dt = datetime.now(ZoneInfo(tz_name))
+        today_str = now_dt.strftime("%Y-%m-%d")
+        if _shift_end_prompted_date == today_str:
+            return
+
+        start_time = _parse_hhmm(start_str)
+        end_time = _parse_hhmm(end_str)
+        if start_time <= end_time:
+            shift_ended = now_dt.time() >= end_time
+        else:
+            # Cross-midnight overnight shift (e.g. 20:00 to 06:00)
+            # Shift ends in the morning between 06:00 and start_time (20:00)
+            shift_ended = end_time <= now_dt.time() < start_time
+
+        if shift_ended:
+            _shift_end_prompted_date = today_str
+
+            def _prompt_in_thread():
+                global _shift_dialog_open
+                _shift_dialog_open = True
+                try:
+                    from utils.login_dialog import prompt_shift_end_dialog
+
+                    agent_label = _active_name or (_active_email.split("@")[0].title() if _active_email else "Agent")
+                    should_end = prompt_shift_end_dialog(
+                        employee_name=agent_label,
+                        shift_name=shift_name,
+                        shift_start=start_str,
+                        shift_end=end_str,
+                    )
+                    if should_end:
+                        LOGGER.info("Agent clicked 'End Shift & Check Out' in shift end dialog.")
+                        trigger_checkout()
+                    else:
+                        LOGGER.info("Agent clicked 'Continue Working (Overtime)'. Tracking continues.")
+                except Exception as exc:
+                    LOGGER.error("Failed to show shift end dialog: %s", exc)
+                finally:
+                    _shift_dialog_open = False
+
+            threading.Thread(target=_prompt_in_thread, daemon=True).start()
+    except Exception as exc:
+        LOGGER.debug("Error checking shift end: %s", exc)
+
 
 
 class ActivityAccumulator:
@@ -174,12 +264,16 @@ def activity_loop():
     voip_until = 0.0
 
     while True:
-        inputs = get_and_reset_input_status()
-        if not is_within_assigned_shift():
+        if not _is_session_active:
             accumulator.flush()
-            _latest_state, _latest_app = "off_shift", None
+            _latest_state, _latest_app = "offline", None
             time.sleep(SAMPLE_INTERVAL_SECS)
             continue
+
+        inputs = get_and_reset_input_status()
+        # Automatic tracking stop is disabled to support continuous overtime and client calls.
+        # Employees are prompted with an interactive dialog when their shift ends instead of hard-pausing.
+
 
         locked = is_screen_locked() or not is_current_session_active()
         if locked:
@@ -251,7 +345,9 @@ def sync_loop():
                 save_event("client_stopped", {"reason": "authorized_remote_command"})
                 os._exit(0)
 
+        check_shift_end_and_notify()
         time.sleep(SYNC_INTERVAL_SECS)
+
 
 
 def start_watchdog(force: bool = False):
@@ -316,7 +412,55 @@ def _handle_identity_switch(new_email: str, new_name: str):
         LOGGER.info("Tracking session successfully switched to %s <%s>", new_name, new_email)
 
 
+def create_tray_icon(email: str, name: str, on_end_shift):
+    import pystray
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (64, 64), color=(30, 41, 59))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse([16, 16, 48, 48], fill=(16, 185, 129))
+
+    display_name = name or (email.split("@")[0].title() if "@" in email else email)
+    menu = pystray.Menu(
+        pystray.MenuItem(f"Agent: {display_name}", None, enabled=False),
+        pystray.MenuItem(f"Email: {email}", None, enabled=False),
+        pystray.MenuItem("Status: Active / Tracking", None, enabled=False),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("⏹ End Shift / Check-Out", on_end_shift),
+    )
+
+    icon = pystray.Icon(
+        "SentinelTracker",
+        image,
+        f"Sentinel Tracker - {display_name} ({email})",
+        menu=menu,
+    )
+    return icon
+
+
+def make_end_shift_handler():
+    def on_end_shift(icon, item):
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        confirmed = messagebox.askyesno(
+            "End Shift / Check-Out",
+            "Are you sure you want to end your shift?\n\nTracking will pause until the next check-in.",
+            parent=root,
+        )
+        root.destroy()
+        if confirmed:
+            LOGGER.info("Agent confirmed shift end / check-out")
+            global _is_session_active
+            _is_session_active = False
+            icon.stop()
+    return on_end_shift
+
+
 def main():
+    global SESSION_ID, _is_session_active, _active_email, _active_name
     configure_logging()
     if not _acquire_singleton():
         LOGGER.info("Tracker is already running for this Windows profile")
@@ -326,36 +470,68 @@ def main():
     if "--resume-tracking" in sys.argv:
         STOP_FILE.unlink(missing_ok=True)
     init_db()
-
-    from utils.identity_detector import detect_current_identity, IdentityWatcher
-    initial_id = detect_current_identity(get_active_window_title())
-    initial_email = initial_id.get("email") if initial_id else None
-    initial_name = initial_id.get("name") if initial_id else None
-
-    while not auto_authenticate(detected_email=initial_email, detected_name=initial_name):
-        LOGGER.info("Waiting 30 seconds before retrying profile fetch")
-        time.sleep(30)
     start_tracking()
-    save_event("client_started", {"session_id": SESSION_ID})
     start_watchdog()
     threading.Thread(target=watchdog_guard_loop, daemon=True).start()
     threading.Thread(target=activity_loop, daemon=True).start()
     threading.Thread(target=sync_loop, daemon=True).start()
 
-    identity_watcher = IdentityWatcher(callback=_handle_identity_switch, check_interval_secs=15)
-    identity_watcher.start()
+    # =========================================================================
+    # PREVIOUS AUTOMATIC IDENTITY DETECTION (TEAMS / KEKA / CHROME)
+    # Preserved in comments as requested. To switch back to auto-detection,
+    # change AUTH_MODE = "AUTO" at top of file and uncomment the block below:
+    # =========================================================================
+    # if AUTH_MODE == "AUTO":
+    #     from utils.identity_detector import detect_current_identity, IdentityWatcher
+    #     initial_id = detect_current_identity(get_active_window_title())
+    #     initial_email = initial_id.get("email") if initial_id else None
+    #     initial_name = initial_id.get("name") if initial_id else None
+    #     while not auto_authenticate(detected_email=initial_email, detected_name=initial_name):
+    #         LOGGER.info("Waiting 30 seconds before retrying profile fetch")
+    #         time.sleep(30)
+    #     _is_session_active = True
+    #     save_event("client_started", {"session_id": SESSION_ID})
+    #     identity_watcher = IdentityWatcher(callback=_handle_identity_switch, check_interval_secs=15)
+    #     identity_watcher.start()
+    #     icon = create_tray_icon(initial_email or "Auto", initial_name or "Agent", make_end_shift_handler())
+    #     icon.run()
+    #     return
+    # =========================================================================
 
-    import pystray
-    from PIL import Image, ImageDraw
+    from utils.login_dialog import prompt_user_checkin
 
-    image = Image.new("RGB", (64, 64), color=(30, 41, 59))
-    draw = ImageDraw.Draw(image)
-    draw.ellipse([16, 16, 48, 48], fill=(16, 185, 129))
-    pystray.Icon(
-        "SentinelTracker",
-        image,
-        "Sentinel Tracker - activity metadata only",
-    ).run()
+    # Interactive check-in loop for shared workstations & shifts
+    while True:
+        email, name = prompt_user_checkin()
+        if not email:
+            LOGGER.warning("Check-in dialog closed or cancelled. Re-prompting in 10s...")
+            time.sleep(10)
+            continue
+
+        LOGGER.info("Agent checked in: %s <%s>", name, email)
+        while not auto_authenticate(force=True, detected_email=email, detected_name=name):
+            LOGGER.info("Waiting 10 seconds before retrying profile fetch")
+            time.sleep(10)
+
+        _active_email = email
+        _active_name = name
+        SESSION_ID = uuid.uuid4().hex
+        _is_session_active = True
+        _shift_end_prompted_date = None
+        _session_started_at = datetime.now()
+        save_event("session_started", {"session_id": SESSION_ID, "email": email, "name": name})
+
+        # Run system tray icon (blocks until agent clicks "End Shift / Check-Out")
+        icon = create_tray_icon(email, name, make_end_shift_handler())
+        _current_tray_icon = icon
+        icon.run()
+        _current_tray_icon = None
+
+        # When icon.run() stops (agent clicked End Shift):
+        _is_session_active = False
+        save_event("session_ended", {"session_id": SESSION_ID, "reason": "manual_checkout", "email": email})
+        LOGGER.info("Shift ended for %s <%s>. Opening Check-In popup for next agent...", name, email)
+
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import {
   getWsToken,
   type EmployeeSummary,
   type EmployeeAnalytics,
+  type AnalyticsQueryOptions,
 } from "@/lib/api";
 
 // ─── Summary hook (used by main dashboard) ───────────────────────────────────
@@ -38,15 +39,20 @@ export function useSummary() {
 }
 
 // ─── Employee detail hook ─────────────────────────────────────────────────────
-export function useEmployeeDetail(id: number, period = "day") {
+export function useEmployeeDetail(
+  id: number,
+  options: AnalyticsQueryOptions | string = "day",
+) {
   const [analytics, setAnalytics] = useState<EmployeeAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const queryKey = typeof options === "string" ? options : JSON.stringify(options);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchEmployeeAnalytics(id, period)
+    fetchEmployeeAnalytics(id, options)
       .then((result) => {
         if (!cancelled) setAnalytics(result);
       })
@@ -59,7 +65,7 @@ export function useEmployeeDetail(id: number, period = "day") {
     return () => {
       cancelled = true;
     };
-  }, [id, period]);
+  }, [id, queryKey]);
 
   return { analytics, loading, error };
 }

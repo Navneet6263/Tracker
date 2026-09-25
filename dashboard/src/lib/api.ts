@@ -83,12 +83,37 @@ export function fetchWorkDeclines() {
   return apiFetch<WorkDecline[]>("/work/declines");
 }
 
-export function fetchEmployeeAnalytics(id: number, period = "day") {
-  return apiFetch<EmployeeAnalytics>(`/analytics/employee/${id}?period=${period}`);
+export interface AnalyticsQueryOptions {
+  period?: string;
+  date?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export function fetchEmployeeAnalytics(
+  id: number,
+  options: AnalyticsQueryOptions | string = "day",
+) {
+  const params = new URLSearchParams();
+  if (typeof options === "string") {
+    params.set("period", options);
+  } else {
+    if (options.period) params.set("period", options.period);
+    if (options.date) params.set("date", options.date);
+    if (options.start_date) params.set("start_date", options.start_date);
+    if (options.end_date) params.set("end_date", options.end_date);
+  }
+  return apiFetch<EmployeeAnalytics>(`/analytics/employee/${id}?${params.toString()}`);
 }
 
 export function stopClient(employeeId: number | string) {
   return apiFetch(`/events/stop_client/${employeeId}`, { method: "POST" });
+}
+
+export function deleteEmployee(id: number | string) {
+  return apiFetch<{ status: string; message: string }>(`/analytics/employee/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export function fetchEvents(employeeId: number) {
@@ -142,22 +167,77 @@ export interface EmployeeSummary {
   } | null;
 }
 
+export interface HourlySlot {
+  hour: string;
+  hour_int: number;
+  active_mins: number;
+  meeting_mins: number;
+  passive_mins: number;
+  idle_mins: number;
+  locked_mins: number;
+  keyboard_events: number;
+  mouse_events: number;
+  top_app: string | null;
+  has_activity: boolean;
+}
+
+export interface DailyBreakdownItem {
+  date: string;
+  day_name: string;
+  active_hours: number;
+  meeting_mins: number;
+  idle_mins: number;
+  locked_mins: number;
+  productivity_score: number;
+  keyboard_events: number;
+  mouse_events: number;
+  top_app: string | null;
+}
+
+export interface WorkSessionItem {
+  session_id: string;
+  device_name: string;
+  started_at: string;
+  ended_at: string | null;
+  active_hours: number;
+  total_events: number;
+}
+
+export interface AppBreakdownItem {
+  app: string;
+  category: string;
+  secs: number;
+  hours: number;
+  percentage?: number;
+}
+
 export interface EmployeeAnalytics {
+  selected_date?: string | null;
+  effective_period?: string;
+  since?: string;
+  until?: string;
   productivity_score: number;
   active_hours: number;
   keyboard_mins: number;
   mouse_mins: number;
   keyboard_events: number;
   mouse_events: number;
+  keystrokes_per_hour?: number;
+  clicks_per_hour?: number;
   meeting_mins: number;
   passive_mins: number;
   idle_mins: number;
   locked_mins: number;
+  off_shift_mins?: number;
   state_breakdown: Record<string, number>;
-  app_breakdown: { app: string; category: string; secs: number; hours: number }[];
+  hourly_timeline?: HourlySlot[];
+  daily_breakdown?: DailyBreakdownItem[];
+  work_sessions?: WorkSessionItem[];
+  app_breakdown: AppBreakdownItem[];
   page_breakdown: { app: string; title: string; secs: number }[];
   offline_periods: { from: string; to: string; reason: string }[];
 }
+
 
 export interface EventItem {
   id: number;
