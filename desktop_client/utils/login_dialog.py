@@ -41,6 +41,14 @@ def save_last_name(name: str):
         pass
 
 
+def clear_last_user():
+    try:
+        LAST_EMAIL_FILE.unlink(missing_ok=True)
+        LAST_NAME_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
 def prompt_user_checkin() -> tuple[str, str]:
     """
     Displays a spacious, enterprise-grade check-in popup window asking the employee for their details.

@@ -132,64 +132,10 @@ def is_within_assigned_shift() -> bool:
 
 def check_shift_end_and_notify():
     """
-    Checks if the employee's shift has completed.
-    Instead of automatically cutting off tracking, prompts the employee with an interactive
-    dialog asking if they want to end their shift & check out, or continue working (overtime).
+    Automatic interruptions are disabled so employees can work continuously without distraction.
+    Employees check out when ready by clicking 'End Shift / Check-Out' in the tray icon.
     """
-    global _shift_end_prompted_date, _shift_dialog_open
-    if not _is_session_active or _shift_dialog_open:
-        return
-
-    shift = get_user_config().get("shift")
-    tz_name = shift.get("timezone", "Asia/Kolkata") if shift else "Asia/Kolkata"
-    shift_name = shift.get("name", "Day Shift (9-6)") if shift else "Day Shift (9-6)"
-    start_str = shift.get("start", "09:00") if shift else "09:00"
-    end_str = shift.get("end", "18:00") if shift else "18:00"
-
-    try:
-        now_dt = datetime.now(ZoneInfo(tz_name))
-        today_str = now_dt.strftime("%Y-%m-%d")
-        if _shift_end_prompted_date == today_str:
-            return
-
-        start_time = _parse_hhmm(start_str)
-        end_time = _parse_hhmm(end_str)
-        if start_time <= end_time:
-            shift_ended = now_dt.time() >= end_time
-        else:
-            # Cross-midnight overnight shift (e.g. 20:00 to 06:00)
-            # Shift ends in the morning between 06:00 and start_time (20:00)
-            shift_ended = end_time <= now_dt.time() < start_time
-
-        if shift_ended:
-            _shift_end_prompted_date = today_str
-
-            def _prompt_in_thread():
-                global _shift_dialog_open
-                _shift_dialog_open = True
-                try:
-                    from utils.login_dialog import prompt_shift_end_dialog
-
-                    agent_label = _active_name or (_active_email.split("@")[0].title() if _active_email else "Agent")
-                    should_end = prompt_shift_end_dialog(
-                        employee_name=agent_label,
-                        shift_name=shift_name,
-                        shift_start=start_str,
-                        shift_end=end_str,
-                    )
-                    if should_end:
-                        LOGGER.info("Agent clicked 'End Shift & Check Out' in shift end dialog.")
-                        trigger_checkout()
-                    else:
-                        LOGGER.info("Agent clicked 'Continue Working (Overtime)'. Tracking continues.")
-                except Exception as exc:
-                    LOGGER.error("Failed to show shift end dialog: %s", exc)
-                finally:
-                    _shift_dialog_open = False
-
-            threading.Thread(target=_prompt_in_thread, daemon=True).start()
-    except Exception as exc:
-        LOGGER.debug("Error checking shift end: %s", exc)
+    pass
 
 
 
@@ -456,22 +402,13 @@ def create_tray_icon(email: str, name: str, on_end_shift):
 
 def make_end_shift_handler():
     def on_end_shift(icon, item):
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        confirmed = messagebox.askyesno(
-            "End Shift / Check-Out",
-            "Are you sure you want to end your shift?\n\nTracking will pause until the next check-in.",
-            parent=root,
-        )
-        root.destroy()
-        if confirmed:
-            LOGGER.info("Agent confirmed shift end / check-out")
-            global _is_session_active
-            _is_session_active = False
+        LOGGER.info("Agent clicked End Shift / Check-Out from tray icon")
+        global _is_session_active
+        _is_session_active = False
+        try:
             icon.stop()
+        except Exception as exc:
+            LOGGER.warning("Error stopping tray icon: %s", exc)
     return on_end_shift
 
 
@@ -554,6 +491,13 @@ def main():
         _is_session_active = False
         save_event("session_ended", {"session_id": SESSION_ID, "reason": "manual_checkout", "email": email})
         LOGGER.info("Shift ended for %s <%s>. Opening Check-In popup for next agent...", name, email)
+        clear_employee_token()
+        from utils.login_dialog import clear_last_user
+        clear_last_user()
+        threading.Thread(
+            target=lambda: ping_online("offline", None),
+            daemon=True,
+        ).start()
 
 
 
