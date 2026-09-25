@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, time as clock_time, timezone
+from datetime import datetime, time as clock_time, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -235,25 +235,27 @@ class ActivityAccumulator:
         if self.state is None or self.started_at is None:
             return
         ended_at = datetime.now(timezone.utc)
-        duration = int((ended_at - self.started_at).total_seconds())
-        if duration > 0:
-            save_activity(
-                {
-                    "event_id": str(uuid.uuid4()),
-                    "session_id": SESSION_ID,
-                    "device_name": IDENTITY["hostname"],
-                    "windows_user": IDENTITY["username"],
-                    "state": self.state,
-                    "app_name": self.app_name,
-                    "domain": self.context_title,
-                    "started_at": self.started_at.isoformat(),
-                    "ended_at": ended_at.isoformat(),
-                    "keyboard_events": self.keyboard_events,
-                    "mouse_events": self.mouse_events,
-                    "keyboard_active_secs": min(duration, self.keyboard_active_secs),
-                    "mouse_active_secs": min(duration, self.mouse_active_secs),
-                }
-            )
+        raw_duration = (ended_at - self.started_at).total_seconds()
+        duration = max(1, int(round(raw_duration)))
+        if ended_at <= self.started_at:
+            ended_at = self.started_at + timedelta(seconds=duration)
+        save_activity(
+            {
+                "event_id": str(uuid.uuid4()),
+                "session_id": SESSION_ID,
+                "device_name": IDENTITY["hostname"],
+                "windows_user": IDENTITY["username"],
+                "state": self.state,
+                "app_name": self.app_name,
+                "domain": self.context_title,
+                "started_at": self.started_at.isoformat(),
+                "ended_at": ended_at.isoformat(),
+                "keyboard_events": self.keyboard_events,
+                "mouse_events": self.mouse_events,
+                "keyboard_active_secs": min(duration, self.keyboard_active_secs),
+                "mouse_active_secs": min(duration, self.mouse_active_secs),
+            }
+        )
         self.reset()
 
 

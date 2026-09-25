@@ -92,21 +92,23 @@ async def ingest_activity(
 
         started_at = _as_utc_naive(sample.started_at)
         ended_at = _as_utc_naive(sample.ended_at)
-        duration = int((ended_at - started_at).total_seconds())
-        if duration <= 0 or duration > 300:
-            raise HTTPException(status_code=422, detail="Activity intervals must be 1-300 seconds")
-        if ended_at > now + timedelta(minutes=5) or started_at < now - timedelta(days=14):
-            raise HTTPException(status_code=422, detail="Activity timestamp is outside the accepted range")
+        raw_duration = (ended_at - started_at).total_seconds()
+        duration = max(1, min(300, int(round(raw_duration))))
+        if ended_at <= started_at:
+            ended_at = started_at + timedelta(seconds=duration)
+
+        # Handle clock skew gracefully without rejecting valid activities
+        if ended_at > now + timedelta(minutes=5):
+            skew = ended_at - now
+            started_at = max(started_at - skew, now - timedelta(days=14))
+            ended_at = started_at + timedelta(seconds=duration)
 
         normalized_state = sample.state
         if (sample.app_name or "").strip().lower() == "lockapp" or (
             sample.domain or ""
         ).strip().casefold() == "windows default lock screen":
             normalized_state = "locked"
-        if normalized_state in WORK_STATES and not is_within_shift(
-            started_at, assigned_shift
-        ):
-            normalized_state = "off_shift"
+
         label = " ".join(filter(None, [sample.app_name, sample.domain]))
         category = "productive" if normalized_state == "meeting" else classify(label)
         row = ActivityInterval(

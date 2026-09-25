@@ -24,7 +24,7 @@ from services.shifts import is_within_shift, serialize_shift
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
-WORK_STATES = ("active", "passive", "meeting")
+WORK_STATES = ("active", "passive", "meeting", "off_shift")
 MIN_PAGE_SECONDS = 10
 GAP_MERGE_SECONDS = 60
 SYSTEM_PAGE_TITLES = {
@@ -82,6 +82,8 @@ def _effective_state(state: str, app_name: str | None, title: str | None) -> str
         return "locked"
     if (title or "").strip().casefold() == "windows default lock screen":
         return "locked"
+    if state == "off_shift":
+        return "active"
     return state
 
 
@@ -366,7 +368,7 @@ def employee_analytics(
                 slot["locked_secs"] += interval.duration_secs
             slot["keyboard_events"] += interval.keyboard_events or 0
             slot["mouse_events"] += interval.mouse_events or 0
-            if interval.app_name and effective_state in WORK_STATES:
+            if interval.app_name:
                 app_disp = _display_app_name(interval.app_name)
                 slot["apps"][app_disp] = slot["apps"].get(app_disp, 0) + interval.duration_secs
 
@@ -423,7 +425,7 @@ def employee_analytics(
         sessions_map[s_id]["events_count"] += (interval.keyboard_events or 0) + (interval.mouse_events or 0)
 
         # App & Page tracking
-        if effective_state in WORK_STATES:
+        if effective_state in WORK_STATES or interval.app_name:
             app = _display_app_name(interval.app_name)
             key = (app, interval.category)
             app_secs[key] = app_secs.get(key, 0) + interval.duration_secs

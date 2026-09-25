@@ -148,7 +148,13 @@ def upload_activity(samples: list[dict]) -> bool:
         response = _authorized_post(
             "/activity/batch", json_body={"samples": samples}, timeout=15
         )
-        return response is not None and response.status_code == 200
+        if response is not None:
+            if response.status_code == 200:
+                return True
+            if response.status_code == 422:
+                LOGGER.warning("Activity batch discarded due to 422 response: %s", getattr(response, "text", ""))
+                return True
+        return False
     except requests.RequestException:
         return False
 
@@ -163,7 +169,13 @@ def upload_event(event_type: str, payload: dict, timestamp: str) -> bool:
                 "timestamp": timestamp,
             },
         )
-        return response is not None and response.status_code == 200
+        if response is not None:
+            if response.status_code in (200, 201):
+                return True
+            if response.status_code == 422:
+                LOGGER.warning("Event discarded due to 422 response: %s", getattr(response, "text", ""))
+                return True
+        return False
     except requests.RequestException:
         return False
 
