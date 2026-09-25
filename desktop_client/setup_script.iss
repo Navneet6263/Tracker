@@ -35,6 +35,7 @@ Type: files; Name: "{commonappdata}\SentinelTracker\organization.json"
 
 [Icons]
 Name: "{autoprograms}\Sentinel Employee Tracker"; Filename: "{app}\EmployeeTracker.exe"; Parameters: "--resume-tracking"
+Name: "{commonstartup}\Sentinel Employee Tracker"; Filename: "{app}\EmployeeTracker.exe"; Parameters: "--resume-tracking"
 
 [Registry]
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "SentinelEmployeeTracker"; ValueData: """{app}\EmployeeTracker.exe"" --resume-tracking"; Flags: uninsdeletevalue

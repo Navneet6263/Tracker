@@ -62,6 +62,8 @@ def prompt_user_checkin() -> tuple[str, str]:
     y = max(0, (root.winfo_screenheight() // 2) - (height // 2))
     root.geometry(f"{width}x{height}+{x}+{y}")
     root.attributes("-topmost", True)
+    root.lift()
+    root.focus_force()
 
     # Main Card Container
     card = tk.Frame(root, bg="#1e293b", padx=32, pady=26)
@@ -198,6 +200,7 @@ def prompt_user_checkin() -> tuple[str, str]:
         )
 
     root.protocol("WM_DELETE_WINDOW", on_prevent_close)
+    root.bind("<Escape>", lambda e: on_prevent_close())
     name_entry.bind("<Return>", lambda e: email_entry.focus_set())
     email_entry.bind("<Return>", on_submit)
 

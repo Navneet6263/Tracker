@@ -512,52 +512,46 @@ def main():
     #     return
     # =========================================================================
 
-    cfg = get_user_config()
-    saved_email = (cfg.get("employee_email") or "").strip().lower()
-    saved_name = (cfg.get("employee_name") or "").strip()
+    from utils.login_dialog import prompt_user_checkin
 
-    # Fast start loop: if employee already entered their details, start immediately!
+    # Interactive check-in loop for shared computers & rotating shifts
+    # Every time the PC boots, restarts, or an agent checks out, this popup identifies WHO is sitting at the PC.
     while True:
-        if not saved_email:
-            # First run or after explicit check-out: ask for name & email once
-            from utils.login_dialog import prompt_user_checkin
-            email, name = prompt_user_checkin()
-            if not email:
-                time.sleep(5)
-                continue
+        email, name = prompt_user_checkin()
+        if not email:
+            time.sleep(5)
+            continue
 
-            LOGGER.info("Agent checked in: %s <%s>", name, email)
-            clear_employee_token()
-            while not auto_authenticate(force=True, detected_email=email, detected_name=name):
-                LOGGER.info("Waiting 5 seconds before retrying profile fetch")
-                time.sleep(5)
-            saved_email = email
-            saved_name = name
-        else:
-            LOGGER.info("Auto-resuming session for configured employee: %s <%s>", saved_name, saved_email)
-            if not get_employee_token():
-                auto_authenticate(force=True, detected_email=saved_email, detected_name=saved_name)
+        LOGGER.info("Agent checked in on shared PC: %s <%s>", name, email)
+        clear_employee_token()
+        while not auto_authenticate(force=True, detected_email=email, detected_name=name):
+            LOGGER.info("Waiting 5 seconds before retrying profile fetch")
+            time.sleep(5)
 
-        _active_email = saved_email
-        _active_name = saved_name
+        _active_email = email
+        _active_name = name
         SESSION_ID = uuid.uuid4().hex
         _is_session_active = True
         _shift_end_prompted_date = None
         _session_started_at = datetime.now()
-        save_event("session_started", {"session_id": SESSION_ID, "email": saved_email, "name": saved_name})
+        save_event("session_started", {"session_id": SESSION_ID, "email": email, "name": name})
 
-        # Run system tray icon (runs silently; only unblocks if employee manually clicks "End Shift")
-        icon = create_tray_icon(saved_email, saved_name, make_end_shift_handler())
+        # Immediately send active presence ping so dashboard turns Active/Online in 1 second!
+        threading.Thread(
+            target=lambda: ping_online("active", get_active_app_name()),
+            daemon=True,
+        ).start()
+
+        # Run system tray icon (runs silently; only unblocks if employee clicks "End Shift / Check-Out")
+        icon = create_tray_icon(email, name, make_end_shift_handler())
         _current_tray_icon = icon
         icon.run()
         _current_tray_icon = None
 
-        # When icon.run() stops (agent explicitly clicked End Shift):
+        # When icon.run() stops (agent clicked End Shift):
         _is_session_active = False
-        save_event("session_ended", {"session_id": SESSION_ID, "reason": "manual_checkout", "email": saved_email})
-        LOGGER.info("Shift ended for %s <%s>. Opening Check-In popup for next agent...", saved_name, saved_email)
-        saved_email = None
-        saved_name = None
+        save_event("session_ended", {"session_id": SESSION_ID, "reason": "manual_checkout", "email": email})
+        LOGGER.info("Shift ended for %s <%s>. Opening Check-In popup for next agent...", name, email)
 
 
 
