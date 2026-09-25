@@ -478,31 +478,33 @@ def employee_analytics(
 
     daily_breakdown = []
     for d_key, dg in sorted(daily_groups.items(), key=lambda x: x[0], reverse=True):
-        top_app = max(dg["apps"].items(), key=lambda x: x[1])[0] if dg["apps"] else None
-        w_s = dg["work_secs"]
-        p_s = dg["productive_secs"]
+        top_app = max(dg["apps"].items(), key=lambda x: x[1])[0] if dg.get("apps") else None
+        w_s = dg.get("work_secs", 0)
+        p_s = dg.get("productive_secs", 0)
         daily_breakdown.append({
-            "date": dg["date"],
-            "day_name": dg["day_name"],
+            "date": dg.get("date", d_key),
+            "day_name": dg.get("day_name", ""),
             "active_hours": round(w_s / 3600, 2),
-            "meeting_mins": round(dg["meeting_secs"] / 60, 1),
-            "idle_mins": round(dg["idle_mins"] / 60, 1),
-            "locked_mins": round(dg["locked_secs"] / 60, 1),
+            "meeting_mins": round(dg.get("meeting_secs", 0) / 60, 1),
+            "idle_mins": round(dg.get("idle_secs", 0) / 60, 1),
+            "locked_mins": round(dg.get("locked_secs", 0) / 60, 1),
             "productivity_score": round((p_s / w_s) * 100, 1) if w_s else 0.0,
-            "keyboard_events": dg["keyboard_events"],
-            "mouse_events": dg["mouse_events"],
+            "keyboard_events": dg.get("keyboard_events", 0),
+            "mouse_events": dg.get("mouse_events", 0),
             "top_app": top_app,
         })
 
     work_sessions_list = []
     for s_id, s_data in sorted(sessions_map.items(), key=lambda x: x[1]["started_at"], reverse=True):
+        st_at = s_data.get("started_at")
+        en_at = s_data.get("ended_at")
         work_sessions_list.append({
             "session_id": s_id,
-            "device_name": s_data["device_name"],
-            "started_at": s_data["started_at"].isoformat(),
-            "ended_at": s_data["ended_at"].isoformat() if s_data["ended_at"] else None,
-            "active_hours": round(s_data["work_secs"] / 3600, 2),
-            "total_events": s_data["events_count"],
+            "device_name": s_data.get("device_name", "Windows Profile"),
+            "started_at": st_at.isoformat() if hasattr(st_at, "isoformat") else str(st_at or ""),
+            "ended_at": en_at.isoformat() if hasattr(en_at, "isoformat") else (str(en_at) if en_at else None),
+            "active_hours": round(s_data.get("work_secs", 0) / 3600, 2),
+            "total_events": s_data.get("events_count", 0),
         })
 
     total_app_secs = sum(app_secs.values()) or 1
