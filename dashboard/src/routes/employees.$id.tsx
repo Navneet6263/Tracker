@@ -116,7 +116,7 @@ function EmployeeDetailContent() {
     return { date: selectedDate, period: "day" };
   }, [period, selectedDate]);
 
-  const { analytics, loading: detailLoading, error: detailError } = useEmployeeDetail(employeeId, queryOptions);
+  const { analytics, loading: detailLoading, error: detailError, refetch } = useEmployeeDetail(employeeId, queryOptions);
 
   const handleDelete = async () => {
     try {
@@ -130,10 +130,27 @@ function EmployeeDetailContent() {
   };
 
   useEffect(() => {
-    fetchSummary()
-      .then((all) => setEmployee(all.find((item) => item.id === employeeId) ?? null))
-      .catch(() => setEmployee(null))
-      .finally(() => setEmployeeLoading(false));
+    let cancelled = false;
+    const loadPresence = () => {
+      fetchSummary()
+        .then((all) => {
+          if (!cancelled) setEmployee(all.find((item) => item.id === employeeId) ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setEmployee(null);
+        })
+        .finally(() => {
+          if (!cancelled) setEmployeeLoading(false);
+        });
+    };
+
+    loadPresence();
+    // Auto-refresh presence every 10 seconds so live state (Active, Idle, Locked, Offline) updates automatically
+    const timer = window.setInterval(loadPresence, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [employeeId]);
 
   if (employeeLoading) {
@@ -243,6 +260,18 @@ function EmployeeDetailContent() {
 
             {/* Profile Actions */}
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  refetch?.();
+                  fetchSummary().then((all) => setEmployee(all.find((item) => item.id === employeeId) ?? null));
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 cursor-pointer"
+                title="Refresh live status, presence, and activity"
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Refresh Live
+              </button>
+
               <button
                 type="button"
                 onClick={() => window.print()}

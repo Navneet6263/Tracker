@@ -49,25 +49,29 @@ export function useEmployeeDetail(
 
   const queryKey = typeof options === "string" ? options : JSON.stringify(options);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchEmployeeAnalytics(id, options)
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    return fetchEmployeeAnalytics(id, options)
       .then((result) => {
-        if (!cancelled) setAnalytics(result);
+        setAnalytics(result);
+        setError(null);
       })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : "Failed to load");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, [id, queryKey]);
 
-  return { analytics, loading, error };
+  useEffect(() => {
+    load(false);
+    // Auto-refresh analytics every 15 seconds so active day graphs update live
+    const timer = window.setInterval(() => load(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  return { analytics, loading, error, refetch: () => load(false) };
 }
 
 // ─── Live WebSocket hook (for real-time active status & keyboard/mouse) ───────

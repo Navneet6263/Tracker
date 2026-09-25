@@ -285,6 +285,11 @@ def activity_loop():
         else:
             if was_locked:
                 save_event("screen_unlocked", {"session_id": SESSION_ID})
+                # Immediately ping server so presence turns Active/Online without delay
+                threading.Thread(
+                    target=lambda: ping_online("active", get_active_app_name()),
+                    daemon=True,
+                ).start()
             was_locked = False
             title = get_active_window_title()
             context_title = " ".join(title.split())[:255] if title else None
@@ -339,16 +344,20 @@ def sync_loop():
             save_event("went_offline", {"session_id": SESSION_ID})
             was_offline = True
 
-        if online and time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL_SECS:
-            response = ping_online(_latest_state, _latest_app)
-            last_heartbeat = time.monotonic()
-            if "shift" in response and response["shift"] != get_user_config().get("shift"):
-                save_user_config({"shift": response["shift"]})
-            if response.get("command") == "stop_client":
-                STOP_FILE.parent.mkdir(parents=True, exist_ok=True)
-                STOP_FILE.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
-                save_event("client_stopped", {"reason": "authorized_remote_command"})
-                os._exit(0)
+        # Heartbeat presence ping runs reliably every 30s as long as session is active
+        if time.monotonic() - last_heartbeat >= HEARTBEAT_INTERVAL_SECS:
+            try:
+                response = ping_online(_latest_state, _latest_app)
+                last_heartbeat = time.monotonic()
+                if "shift" in response and response["shift"] != get_user_config().get("shift"):
+                    save_user_config({"shift": response["shift"]})
+                if response.get("command") == "stop_client":
+                    STOP_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    STOP_FILE.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
+                    save_event("client_stopped", {"reason": "authorized_remote_command"})
+                    os._exit(0)
+            except Exception as exc:
+                LOGGER.debug("Heartbeat ping error: %s", exc)
 
         check_shift_end_and_notify()
         time.sleep(SYNC_INTERVAL_SECS)
