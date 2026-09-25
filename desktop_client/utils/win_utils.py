@@ -101,6 +101,20 @@ VOIP_NATIVE_PROCESSES = {
     "webex": "Webex",
     "ciscocollabhost": "Webex",
     "slack": "Slack Huddle",
+    "microsip": "MicroSIP Dialer",
+    "zoiper": "Zoiper",
+    "zoiper5": "Zoiper",
+    "eyebeam": "EyeBeam Dialer",
+    "skype": "Skype",
+    "skypeapp": "Skype",
+    "whatsapp": "WhatsApp Call",
+    "3cxphone": "3CX Phone",
+    "3cxwin8phone": "3CX Phone",
+    "ciscojabber": "Cisco Jabber",
+    "linphone": "Linphone",
+    "vicidial": "ViciDial",
+    "aircall": "Aircall",
+    "ringcentral": "RingCentral",
 }
 VOIP_TITLE_PATTERNS = {
     "google meet": "Google Meet",
@@ -109,8 +123,24 @@ VOIP_TITLE_PATTERNS = {
     "microsoft teams": "Microsoft Teams",
     "meeting | microsoft teams": "Microsoft Teams",
     "zoom meeting": "Zoom",
+    "zoom": "Zoom",
     "webex": "Webex",
     "slack huddle": "Slack Huddle",
+    "microsip": "MicroSIP Dialer",
+    "zoiper": "Zoiper",
+    "eyebeam": "EyeBeam Dialer",
+    "skype": "Skype",
+    "whatsapp": "WhatsApp Call",
+    "vicidial": "ViciDial",
+    "dialer": "Telecaller Dialer",
+    "telephony": "Telephony Call",
+    "aircall": "Aircall",
+    "justcall": "JustCall",
+    "exotel": "Exotel",
+    "callhippo": "CallHippo",
+    "ozonetel": "Ozonetel",
+    "ameyo": "Ameyo",
+    "leadsquared": "LeadSquared Calling",
 }
 
 
@@ -133,11 +163,18 @@ def detect_voip_call(window_title: str = "") -> str | None:
         for process_name, provider in VOIP_NATIVE_PROCESSES.items():
             if process_name in active_audio_processes:
                 return provider
-        browser_audio = active_audio_processes.intersection({"chrome", "msedge", "firefox"})
-        if browser_audio and title_provider:
-            return title_provider
+        browser_audio = active_audio_processes.intersection(
+            {"chrome", "msedge", "firefox", "brave", "opera"}
+        )
+        if browser_audio:
+            if title_provider:
+                return title_provider
+            call_keywords = ["call", "calling", "dialer", "telephony", "crm", "lead", "agent", "phone"]
+            if any(k in title for k in call_keywords):
+                return "Web Telecaller Call"
     except Exception:
         pass
 
-    call_words = re.search(r"\b(call|meeting|huddle)\b", title)
-    return title_provider if title_provider and call_words else None
+    call_words = re.search(r"\b(call|calling|dialer|meeting|huddle)\b", title)
+    return title_provider if title_provider and call_words else title_provider
+
