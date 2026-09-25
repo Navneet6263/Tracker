@@ -57,14 +57,18 @@ def get_headers() -> dict:
 
 
 def auto_authenticate(force: bool = False, detected_email: str = None, detected_name: str = None) -> bool:
+    cfg = get_user_config()
+    active_email = (detected_email or cfg.get("employee_email") or "").strip().lower()
+    active_name = (detected_name or cfg.get("employee_name") or "").strip()
+
     if get_employee_token() and not force and not detected_email:
         return True
     identity = get_windows_identity()
     payload = dict(identity)
-    if detected_email:
-        payload["detected_email"] = detected_email
-    if detected_name:
-        payload["detected_name"] = detected_name
+    if active_email:
+        payload["detected_email"] = active_email
+    if active_name:
+        payload["detected_name"] = active_name
     try:
         response = HTTP.post(
             f"{get_server_url()}/auth/device-login",

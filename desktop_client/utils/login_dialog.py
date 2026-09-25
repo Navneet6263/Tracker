@@ -6,6 +6,7 @@ from pathlib import Path
 CONFIG_DIR = Path(os.getenv("APPDATA") or os.path.expanduser("~")) / "SentinelTracker"
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 LAST_EMAIL_FILE = CONFIG_DIR / "last_email.txt"
+LAST_NAME_FILE = CONFIG_DIR / "last_name.txt"
 
 
 def get_last_email() -> str:
@@ -24,64 +25,126 @@ def save_last_email(email: str):
         pass
 
 
-def prompt_user_checkin() -> tuple[str, str] | tuple[None, None]:
+def get_last_name() -> str:
+    try:
+        if LAST_NAME_FILE.exists():
+            return LAST_NAME_FILE.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def save_last_name(name: str):
+    try:
+        LAST_NAME_FILE.write_text(name.strip(), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def prompt_user_checkin() -> tuple[str, str]:
     """
-    Displays a modern check-in popup window asking the employee for their official email.
-    Blocks until submitted or cancelled. Returns (email, name).
+    Displays a spacious, enterprise-grade check-in popup window asking the employee for their details.
+    Window cannot be closed / cut off until valid credentials are submitted.
     """
     result = {"email": None, "name": None}
 
     root = tk.Tk()
-    root.title("Sentinel Tracker - Agent Check-In")
-    root.geometry("440x360")
+    root.title("Sentinel Workforce Tracker — Employee Check-In")
+    width = 540
+    height = 510
+    root.geometry(f"{width}x{height}")
     root.resizable(False, False)
-    root.configure(bg="#0f172a")  # Dark slate modern background
+    root.configure(bg="#0f172a")
 
     # Center on screen
     root.update_idletasks()
-    width = 440
-    height = 360
-    x = (root.winfo_screenwidth() // 2) - (width // 2)
-    y = (root.winfo_screenheight() // 2) - (height // 2)
+    x = max(0, (root.winfo_screenwidth() // 2) - (width // 2))
+    y = max(0, (root.winfo_screenheight() // 2) - (height // 2))
     root.geometry(f"{width}x{height}+{x}+{y}")
     root.attributes("-topmost", True)
 
     # Main Card Container
-    card = tk.Frame(root, bg="#1e293b", padx=28, pady=24)
-    card.pack(fill="both", expand=True, padx=14, pady=14)
+    card = tk.Frame(root, bg="#1e293b", padx=32, pady=26)
+    card.pack(fill="both", expand=True, padx=16, pady=16)
 
     # Header Badge / Title
-    title_lbl = tk.Label(
-        card,
+    header_frame = tk.Frame(card, bg="#1e293b")
+    header_frame.pack(fill="x", pady=(0, 10))
+
+    tk.Label(
+        header_frame,
         text="🛡️ Sentinel Workforce Tracker",
-        font=("Segoe UI", 14, "bold"),
+        font=("Segoe UI", 16, "bold"),
         fg="#38bdf8",
         bg="#1e293b",
-    )
-    title_lbl.pack(anchor="w")
+    ).pack(anchor="w")
 
-    subtitle_lbl = tk.Label(
-        card,
-        text="Please enter your official email to start your shift",
-        font=("Segoe UI", 9),
+    tk.Label(
+        header_frame,
+        text="Employee Attendance & Shift Activity Verification",
+        font=("Segoe UI", 10),
         fg="#94a3b8",
         bg="#1e293b",
+    ).pack(anchor="w", pady=(2, 0))
+
+    # Shift Information Banner
+    shift_banner = tk.Frame(card, bg="#0f172a", padx=14, pady=10, highlightthickness=1, highlightbackground="#334155")
+    shift_banner.pack(fill="x", pady=(4, 16))
+
+    tk.Label(
+        shift_banner,
+        text="⏰ Company Shift Timings (Asia/Kolkata):",
+        font=("Segoe UI", 9, "bold"),
+        fg="#fbbf24",
+        bg="#0f172a",
+    ).pack(anchor="w")
+
+    tk.Label(
+        shift_banner,
+        text="• Day Shift: 09:00 AM – 06:00 PM    • Night Shift: 08:00 PM – 06:00 AM",
+        font=("Segoe UI", 9),
+        fg="#cbd5e1",
+        bg="#0f172a",
+    ).pack(anchor="w", pady=(2, 0))
+
+    # Name Field
+    tk.Label(
+        card,
+        text="Full Name *",
+        font=("Segoe UI", 10, "bold"),
+        fg="#f1f5f9",
+        bg="#1e293b",
+    ).pack(anchor="w")
+
+    name_entry = tk.Entry(
+        card,
+        font=("Segoe UI", 12),
+        bg="#0f172a",
+        fg="#ffffff",
+        insertbackground="#38bdf8",
+        relief="flat",
+        highlightthickness=1,
+        highlightbackground="#475569",
+        highlightcolor="#38bdf8",
     )
-    subtitle_lbl.pack(anchor="w", pady=(2, 16))
+    name_entry.pack(fill="x", pady=(4, 12), ipady=7)
+
+    last_name = get_last_name()
+    if last_name:
+        name_entry.insert(0, last_name)
 
     # Email Field
-    email_lbl = tk.Label(
+    tk.Label(
         card,
         text="Official Work Email *",
         font=("Segoe UI", 10, "bold"),
         fg="#f1f5f9",
         bg="#1e293b",
-    )
-    email_lbl.pack(anchor="w")
+    ).pack(anchor="w")
 
     email_entry = tk.Entry(
         card,
-        font=("Segoe UI", 11),
+        font=("Segoe UI", 12),
         bg="#0f172a",
         fg="#ffffff",
         insertbackground="#38bdf8",
@@ -90,83 +153,59 @@ def prompt_user_checkin() -> tuple[str, str] | tuple[None, None]:
         highlightbackground="#475569",
         highlightcolor="#38bdf8",
     )
-    email_entry.pack(fill="x", pady=(4, 12), ipady=6)
+    email_entry.pack(fill="x", pady=(4, 8), ipady=7)
 
     last_email = get_last_email()
     if last_email:
         email_entry.insert(0, last_email)
-        email_entry.select_range(0, tk.END)
-
-    # Name Field (Optional)
-    name_lbl = tk.Label(
-        card,
-        text="Your Full Name (Optional)",
-        font=("Segoe UI", 10),
-        fg="#cbd5e1",
-        bg="#1e293b",
-    )
-    name_lbl.pack(anchor="w")
-
-    name_entry = tk.Entry(
-        card,
-        font=("Segoe UI", 11),
-        bg="#0f172a",
-        fg="#ffffff",
-        insertbackground="#38bdf8",
-        relief="flat",
-        highlightthickness=1,
-        highlightbackground="#475569",
-        highlightcolor="#38bdf8",
-    )
-    name_entry.pack(fill="x", pady=(4, 10), ipady=6)
 
     # Error Label
     err_lbl = tk.Label(
         card,
         text="",
-        font=("Segoe UI", 9),
+        font=("Segoe UI", 9, "bold"),
         fg="#f87171",
         bg="#1e293b",
     )
-    err_lbl.pack(anchor="w", pady=(0, 8))
+    err_lbl.pack(anchor="w", pady=(0, 6))
 
     def on_submit(event=None):
-        email = email_entry.get().strip().lower()
         name = name_entry.get().strip()
+        email = email_entry.get().strip().lower()
+
+        if not name:
+            err_lbl.config(text="⚠️ Please enter your Full Name")
+            name_entry.focus_set()
+            return
 
         if not email or "@" not in email or "." not in email:
-            err_lbl.config(text="⚠️ Please enter a valid work email (e.g. employee@company.com)")
+            err_lbl.config(text="⚠️ Please enter a valid official email (e.g. name@company.com)")
             email_entry.focus_set()
             return
 
-
-        if not name:
-            # Auto generate friendly name from email local part
-            local = email.split("@")[0]
-            name = local.replace(".", " ").replace("-", " ").replace("_", " ").title()
-
+        save_last_name(name)
         save_last_email(email)
-        result["email"] = email
         result["name"] = name
+        result["email"] = email
         root.destroy()
 
-    def on_close():
-        if messagebox.askyesno(
-            "Exit Tracker?",
-            "Tracking is required for activity recording. Are you sure you want to cancel check-in?",
+    # Prevent user from closing / cutting the window without checking in
+    def on_prevent_close():
+        messagebox.showwarning(
+            "Check-In Mandatory",
+            "Attendance & activity recording require checking in.\n\nPlease enter your Full Name and Official Work Email, then click 'Start Shift / Check In' to proceed.",
             parent=root,
-        ):
-            root.destroy()
+        )
 
-    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.protocol("WM_DELETE_WINDOW", on_prevent_close)
+    name_entry.bind("<Return>", lambda e: email_entry.focus_set())
     email_entry.bind("<Return>", on_submit)
-    name_entry.bind("<Return>", on_submit)
 
-    # Submit Button
+    # Big Prominent Submit Button
     btn = tk.Button(
         card,
-        text="▶ Start Shift / Check In",
-        font=("Segoe UI", 11, "bold"),
+        text="🚀 Start Shift / Check In",
+        font=("Segoe UI", 12, "bold"),
         bg="#10b981",
         fg="#ffffff",
         activebackground="#059669",
@@ -175,12 +214,18 @@ def prompt_user_checkin() -> tuple[str, str] | tuple[None, None]:
         cursor="hand2",
         command=on_submit,
     )
-    btn.pack(fill="x", ipady=8, pady=(4, 0))
+    btn.pack(fill="x", ipady=9, pady=(8, 0))
 
-    email_entry.focus_set()
+    if not last_name:
+        name_entry.focus_set()
+    else:
+        email_entry.focus_set()
+        if last_email:
+            email_entry.select_range(0, tk.END)
+
     root.mainloop()
 
-    return result["email"], result["name"]
+    return result["email"] or "", result["name"] or ""
 
 
 def prompt_shift_end_dialog(employee_name: str, shift_name: str, shift_start: str, shift_end: str) -> bool:

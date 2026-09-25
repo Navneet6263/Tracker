@@ -310,6 +310,10 @@ def sync_loop():
     was_offline = False
     last_heartbeat = 0.0
     while True:
+        if not _is_session_active:
+            time.sleep(1)
+            continue
+
         activity_rows = get_pending_activity()
         activity_ids = [row_id for row_id, _ in activity_rows]
         activity_payload = [payload for _, payload in activity_rows]
@@ -509,6 +513,7 @@ def main():
             continue
 
         LOGGER.info("Agent checked in: %s <%s>", name, email)
+        clear_employee_token()
         while not auto_authenticate(force=True, detected_email=email, detected_name=name):
             LOGGER.info("Waiting 10 seconds before retrying profile fetch")
             time.sleep(10)

@@ -45,3 +45,12 @@ Filename: "{app}\EmployeeTracker.exe"; Parameters: "--resume-tracking"; Descript
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /IM TrackerWatchdog.exe /F"; Flags: runhidden waituntilterminated; RunOnceId: "StopWatchdog"
 Filename: "{cmd}"; Parameters: "/C taskkill /IM EmployeeTracker.exe /F"; Flags: runhidden waituntilterminated; RunOnceId: "StopTracker"
+
+[Code]
+function InitializeSetup(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  Exec('cmd.exe', '/C taskkill /F /IM TrackerWatchdog.exe /IM EmployeeTracker.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := True;
+end;
