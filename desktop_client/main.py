@@ -23,6 +23,7 @@ from utils.local_db import (
 )
 from utils.uploader import (
     auto_authenticate,
+    clear_employee_token,
     get_user_config,
     ping_online,
     save_user_config,
