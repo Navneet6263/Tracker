@@ -1,5 +1,7 @@
 import logging
+import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +19,14 @@ from services.shifts import WORK_STATES, infer_shift_assignment, is_within_shift
 router = APIRouter(prefix="/activity", tags=["activity"])
 LOGGER = logging.getLogger("sentinel.activity")
 ALLOWED_STATES = {"active", "passive", "meeting", "idle", "locked"}
+
+
+def is_tracker_paused() -> bool:
+    """Check if tracking sync from APK / Desktop clients is paused."""
+    if os.getenv("PAUSE_TRACKER", "false").strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    pause_file = Path(__file__).resolve().parent.parent / "PAUSE_TRACKER"
+    return pause_file.exists()
 
 
 def _as_utc_naive(value: datetime) -> datetime:
@@ -59,6 +69,9 @@ async def ingest_activity(
     db: Session = Depends(get_db),
     user: Employee = Depends(get_current_user),
 ):
+    if is_tracker_paused():
+        return {"status": "paused", "inserted": 0}
+
     inserted = 0
     latest = None
     now = datetime.now(timezone.utc).replace(tzinfo=None)

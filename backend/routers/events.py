@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.models import AgentCommand, Employee, EmployeePresence, ShiftAssignment, SystemEvent
+from routers.activity import is_tracker_paused
 from routers.ws import broadcast_to_admins
 from services.auth import get_current_user, require_admin
 from services.shifts import serialize_shift
@@ -58,6 +59,10 @@ async def create_event(
 ):
     if req.event_type not in ALLOWED_EVENT_TYPES:
         raise HTTPException(status_code=422, detail="Unsupported event type")
+
+    if is_tracker_paused():
+        return {"status": "paused"}
+
     occurred_at = _parse_timestamp(req.timestamp)
     ev = SystemEvent(
         employee_id=user.id,
@@ -108,6 +113,13 @@ async def ping(
     db: Session = Depends(get_db),
     user: Employee = Depends(get_current_user),
 ):
+    if is_tracker_paused():
+        return {
+            "status": "ok",
+            "command": None,
+            "shift": None,
+        }
+
     presence = db.query(EmployeePresence).filter(EmployeePresence.employee_id == user.id).first()
     if presence is None:
         presence = EmployeePresence(employee_id=user.id)
