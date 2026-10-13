@@ -46,6 +46,14 @@ APP_DISPLAY_NAMES = {
     "chrome": "Google Chrome",
     "firefox": "Mozilla Firefox",
     "explorer": "File Explorer",
+    "strwinclt": "Splashtop",
+    "splashtop": "Splashtop",
+    "splashtopbusiness": "Splashtop Business",
+    "splashtop-streamer": "Splashtop Streamer",
+    "srserver": "Splashtop Server",
+    "anydesk": "AnyDesk",
+    "teamviewer": "TeamViewer",
+    "mstsc": "Remote Desktop",
 }
 
 

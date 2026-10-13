@@ -5,7 +5,8 @@ PRODUCTIVE = {
     "gmail", "google docs", "google sheets", "google meet", "trello",
     "asana", "linear", "clickup", "chrome devtools", "xcode", "android studio",
     "google meet", "meet.google.com", "microsoft teams", "zoom", "webex",
-    "softphone", "voip"
+    "softphone", "voip", "splashtop", "strwinclt", "splashtopbusiness",
+    "anydesk", "teamviewer", "remote desktop", "mstsc"
 }
 UNPRODUCTIVE = {
     "youtube", "netflix", "facebook", "instagram", "twitter", "reddit",
@@ -40,6 +41,10 @@ APP_NAME_MAP = {
     "github": "GitHub",
     "netflix": "Netflix",
     "spotify": "Spotify",
+    "splashtop": "Splashtop",
+    "strwinclt": "Splashtop",
+    "anydesk": "AnyDesk",
+    "teamviewer": "TeamViewer",
 }
 
 def extract_app_name(window_title: str) -> str:
