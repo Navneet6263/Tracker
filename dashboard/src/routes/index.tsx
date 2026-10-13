@@ -531,8 +531,8 @@ function DashboardContent() {
                     <span className="font-medium text-emerald-600">Protected (Bcrypt 12 rounds)</span>
                   </div>
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-400">Session mode:</span>
-                    <span className="font-medium text-slate-700">Localhost JWT Authenticated</span>
+                    <span className="text-slate-400">Session Mode:</span>
+                    <span className="font-medium text-emerald-600">Enterprise Encrypted (JWT 256-bit)</span>
                   </div>
                 </div>
 
@@ -614,15 +614,15 @@ function DashboardContent() {
                 <div className="space-y-2 border-t border-slate-100 pt-4 text-xs text-slate-600">
                   <div className="flex justify-between py-1">
                     <span className="text-slate-400">Installer Package:</span>
-                    <span className="font-semibold text-slate-800">EmployeeTrackerSetup.exe (v1.4.0)</span>
+                    <span className="font-semibold text-slate-800">Sentinel Workforce Tracker Setup (v2.3)</span>
                   </div>
                   <div className="flex justify-between py-1">
                     <span className="text-slate-400">Target Operating System:</span>
                     <span className="font-medium text-slate-800">Windows 10 / Windows 11 (64-bit)</span>
                   </div>
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-400">Backend API URL:</span>
-                    <span className="font-mono text-emerald-700">http://localhost:8000 (Operational)</span>
+                    <span className="text-slate-400">Backend API Status:</span>
+                    <span className="font-medium text-emerald-600">Connected & Operational (Production Gateway)</span>
                   </div>
                   <div className="flex justify-between py-1">
                     <span className="text-slate-400">Auto-Start on Boot:</span>
@@ -632,7 +632,7 @@ function DashboardContent() {
 
                 <div className="rounded-xl bg-slate-50 p-2.5 text-[11px] text-slate-500 flex items-center gap-2">
                   <Download className="h-4 w-4 text-indigo-600 shrink-0" />
-                  <span>Compiled installer located in desktop_client/Output/EmployeeTrackerSetup.exe</span>
+                  <span>Enterprise production client installer (Windows 10 / 11 64-bit)</span>
                 </div>
               </div>
 

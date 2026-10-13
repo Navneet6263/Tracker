@@ -20,7 +20,13 @@ from models.models import (
     WorkSession,
 )
 from services.auth import get_current_user, require_admin
-from services.shifts import is_within_shift, serialize_shift
+from services.shifts import (
+    TIMEZONE,
+    TIMEZONE_NAME,
+    _timezone_for_name,
+    is_within_shift,
+    serialize_shift,
+)
 
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -208,23 +214,28 @@ def employee_analytics(
     if user.role != "admin" and user.id != employee_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    now = _utcnow()
+    emp = db.query(Employee).filter(Employee.id == employee_id).first()
+    tz_name = (emp.timezone_name if emp and emp.timezone_name else None) or TIMEZONE_NAME
+    user_tz = _timezone_for_name(tz_name)
+    now_local = datetime.now(timezone.utc).astimezone(user_tz)
     selected_date_str = None
     effective_period = period
 
     if date:
         date_clean = date.strip().lower()
         if date_clean == "today":
-            target_d = now.date()
+            target_d = now_local.date()
         elif date_clean == "yesterday":
-            target_d = now.date() - timedelta(days=1)
+            target_d = now_local.date() - timedelta(days=1)
         else:
             try:
                 target_d = datetime.strptime(date.strip(), "%Y-%m-%d").date()
             except ValueError:
                 raise HTTPException(status_code=422, detail="Invalid date format, expected YYYY-MM-DD")
-        since = datetime.combine(target_d, datetime.min.time())
-        until = datetime.combine(target_d, datetime.max.time())
+        local_min = datetime.combine(target_d, datetime.min.time(), tzinfo=user_tz)
+        local_max = datetime.combine(target_d, datetime.max.time(), tzinfo=user_tz)
+        since = local_min.astimezone(timezone.utc).replace(tzinfo=None)
+        until = local_max.astimezone(timezone.utc).replace(tzinfo=None)
         selected_date_str = target_d.strftime("%Y-%m-%d")
         effective_period = "day"
     elif start_date and end_date:
@@ -233,28 +244,33 @@ def employee_analytics(
             e_d = datetime.strptime(end_date.strip(), "%Y-%m-%d").date()
         except ValueError:
             raise HTTPException(status_code=422, detail="Invalid date range format, expected YYYY-MM-DD")
-        since = datetime.combine(s_d, datetime.min.time())
-        until = datetime.combine(e_d, datetime.max.time())
+        local_min = datetime.combine(s_d, datetime.min.time(), tzinfo=user_tz)
+        local_max = datetime.combine(e_d, datetime.max.time(), tzinfo=user_tz)
+        since = local_min.astimezone(timezone.utc).replace(tzinfo=None)
+        until = local_max.astimezone(timezone.utc).replace(tzinfo=None)
         selected_date_str = f"{start_date} to {end_date}"
         effective_period = "custom"
     elif period == "yesterday":
-        target_d = now.date() - timedelta(days=1)
-        since = datetime.combine(target_d, datetime.min.time())
-        until = datetime.combine(target_d, datetime.max.time())
+        target_d = now_local.date() - timedelta(days=1)
+        local_min = datetime.combine(target_d, datetime.min.time(), tzinfo=user_tz)
+        local_max = datetime.combine(target_d, datetime.max.time(), tzinfo=user_tz)
+        since = local_min.astimezone(timezone.utc).replace(tzinfo=None)
+        until = local_max.astimezone(timezone.utc).replace(tzinfo=None)
         selected_date_str = target_d.strftime("%Y-%m-%d")
         effective_period = "day"
     elif period == "week":
-        since = now - timedelta(days=7)
-        until = now
+        since = (now_local - timedelta(days=7)).astimezone(timezone.utc).replace(tzinfo=None)
+        until = now_local.astimezone(timezone.utc).replace(tzinfo=None)
         effective_period = "week"
     elif period == "month":
-        since = now - timedelta(days=30)
-        until = now
+        since = (now_local - timedelta(days=30)).astimezone(timezone.utc).replace(tzinfo=None)
+        until = now_local.astimezone(timezone.utc).replace(tzinfo=None)
         effective_period = "month"
     else:  # "day" / "today"
-        target_d = now.date()
-        since = datetime.combine(target_d, datetime.min.time())
-        until = now
+        target_d = now_local.date()
+        local_min = datetime.combine(target_d, datetime.min.time(), tzinfo=user_tz)
+        since = local_min.astimezone(timezone.utc).replace(tzinfo=None)
+        until = now_local.astimezone(timezone.utc).replace(tzinfo=None)
         selected_date_str = target_d.strftime("%Y-%m-%d")
         effective_period = "day"
 
@@ -352,8 +368,9 @@ def employee_analytics(
         keyboard_events += interval.keyboard_events or 0
         mouse_events += interval.mouse_events or 0
 
-        # Hourly slot grouping
-        h = interval.started_at.hour
+        # Hourly slot grouping - localized to employee's timezone
+        local_started = interval.started_at.replace(tzinfo=timezone.utc).astimezone(user_tz)
+        h = local_started.hour
         if 0 <= h <= 23:
             slot = hourly_slots[h]
             if effective_state == "meeting":
@@ -372,12 +389,12 @@ def employee_analytics(
                 app_disp = _display_app_name(interval.app_name)
                 slot["apps"][app_disp] = slot["apps"].get(app_disp, 0) + interval.duration_secs
 
-        # Daily grouping
-        d_key = interval.started_at.strftime("%Y-%m-%d")
+        # Daily grouping - localized calendar date
+        d_key = local_started.strftime("%Y-%m-%d")
         if d_key not in daily_groups:
             daily_groups[d_key] = {
                 "date": d_key,
-                "day_name": interval.started_at.strftime("%A"),
+                "day_name": local_started.strftime("%A"),
                 "work_secs": 0,
                 "productive_secs": 0,
                 "meeting_secs": 0,

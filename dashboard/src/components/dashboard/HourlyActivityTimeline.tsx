@@ -7,12 +7,33 @@ interface Props {
   selectedDate?: string | null;
 }
 
+function formatHour(h: number): string {
+  if (h === 0) return "12 AM";
+  if (h === 12) return "12 PM";
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function formatHourShort(h: number): string {
+  if (h === 0) return "12a";
+  if (h === 12) return "12p";
+  return h < 12 ? `${h}a` : `${h - 12}p`;
+}
+
 export function HourlyActivityTimeline({ timeline = [], selectedDate }: Props) {
   const [hoveredSlot, setHoveredSlot] = useState<HourlySlot | null>(null);
 
-  // Focus business / active hours (e.g. 07:00 to 21:00) or all 24h
+  // Check if there is any activity outside standard business hours (e.g. night shift)
+  const hasOffHoursActivity = timeline.some(
+    (s) => (s.hour_int < 8 || s.hour_int > 20) && s.has_activity
+  );
+
+  const [showFullDay, setShowFullDay] = useState<boolean>(true);
+
+  // Filter slots based on toggle, or all 24h
   const slotsToDisplay = timeline.length > 0
-    ? timeline.filter((slot) => slot.hour_int >= 7 && slot.hour_int <= 21)
+    ? (showFullDay || hasOffHoursActivity)
+      ? timeline
+      : timeline.filter((slot) => slot.hour_int >= 8 && slot.hour_int <= 20)
     : [];
 
   const hasAnyActivity = timeline.some((s) => s.has_activity);
@@ -26,34 +47,50 @@ export function HourlyActivityTimeline({ timeline = [], selectedDate }: Props) {
             <Clock className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">Hourly Activity Timeline</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">Hourly Activity Timeline</h3>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                IST (Asia/Kolkata)
+              </span>
+            </div>
             <p className="text-xs text-slate-500">
               {selectedDate ? `Activity distribution for ${selectedDate}` : "Hour-by-hour activity timeline"}
             </p>
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-xs bg-emerald-500" />
-            <span>Active Work</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-xs bg-purple-500" />
-            <span>VoIP / Calls</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-xs bg-sky-400" />
-            <span>Passive Work</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-xs bg-amber-400" />
-            <span>Idle / Away</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-xs bg-slate-300" />
-            <span>Locked</span>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* 24h vs Standard Shift View Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowFullDay(!showFullDay)}
+            className="cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            {showFullDay ? "Showing: 24 Hours (Full Day)" : "Showing: Shift Hours (08:00 - 20:00)"}
+          </button>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-xs bg-emerald-500" />
+              <span>Active Work</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-xs bg-purple-500" />
+              <span>VoIP / Calls</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-xs bg-sky-400" />
+              <span>Passive Work</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-xs bg-amber-400" />
+              <span>Idle / Away</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-xs bg-slate-300" />
+              <span>Locked</span>
+            </div>
           </div>
         </div>
       </div>
@@ -66,91 +103,101 @@ export function HourlyActivityTimeline({ timeline = [], selectedDate }: Props) {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Timeline Bar Slots */}
-          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-15 gap-1.5 items-end pt-4 pb-1">
-            {slotsToDisplay.map((slot) => {
-              const activeM = slot.active_mins;
-              const meetM = slot.meeting_mins;
-              const passM = slot.passive_mins;
-              const idleM = slot.idle_mins;
-              const lockM = slot.locked_mins;
+          {/* Timeline Bar Slots Container */}
+          <div className="overflow-x-auto pb-1">
+            <div
+              className={`grid gap-1 items-end pt-4 pb-1 min-w-[640px]`}
+              style={{
+                gridTemplateColumns: `repeat(${slotsToDisplay.length}, minmax(0, 1fr))`,
+              }}
+            >
+              {slotsToDisplay.map((slot) => {
+                const activeM = slot.active_mins;
+                const meetM = slot.meeting_mins;
+                const passM = slot.passive_mins;
+                const idleM = slot.idle_mins;
+                const lockM = slot.locked_mins;
 
-              const totalTracked = activeM + meetM + passM + idleM + lockM;
-              const hasWork = totalTracked > 0;
+                const totalTracked = activeM + meetM + passM + idleM + lockM;
+                const hasWork = totalTracked > 0;
 
-              // Normalized height (max 60m per hour)
-              const maxHour = 60;
-              const activeH = Math.min(100, (activeM / maxHour) * 100);
-              const meetH = Math.min(100, (meetM / maxHour) * 100);
-              const passH = Math.min(100, (passM / maxHour) * 100);
-              const idleH = Math.min(100, (idleM / maxHour) * 100);
-              const lockH = Math.min(100, (lockM / maxHour) * 100);
+                // Normalized height (max 60m per hour)
+                const maxHour = 60;
+                const activeH = Math.min(100, (activeM / maxHour) * 100);
+                const meetH = Math.min(100, (meetM / maxHour) * 100);
+                const passH = Math.min(100, (passM / maxHour) * 100);
+                const idleH = Math.min(100, (idleM / maxHour) * 100);
+                const lockH = Math.min(100, (lockM / maxHour) * 100);
 
-              const isHovered = hoveredSlot?.hour_int === slot.hour_int;
+                const isHovered = hoveredSlot?.hour_int === slot.hour_int;
 
-              return (
-                <div
-                  key={slot.hour}
-                  onMouseEnter={() => setHoveredSlot(slot)}
-                  onMouseLeave={() => setHoveredSlot(null)}
-                  className={`group relative flex flex-col items-center cursor-pointer transition-all duration-150 ${
-                    isHovered ? "scale-105 z-10" : ""
-                  }`}
-                >
-                  {/* Vertical bar container */}
-                  <div className="relative flex flex-col justify-end w-full h-24 rounded-lg bg-slate-100/80 p-0.5 overflow-hidden ring-1 ring-slate-200/60 group-hover:ring-indigo-400 group-hover:shadow-sm">
-                    {hasWork ? (
-                      <div className="w-full flex flex-col-reverse justify-start h-full">
-                        {/* Active */}
-                        {activeH > 0 && (
-                          <div
-                            style={{ height: `${activeH}%` }}
-                            className="w-full bg-emerald-500 rounded-xs transition-all"
-                          />
-                        )}
-                        {/* Meeting */}
-                        {meetH > 0 && (
-                          <div
-                            style={{ height: `${meetH}%` }}
-                            className="w-full bg-purple-500 rounded-xs transition-all"
-                          />
-                        )}
-                        {/* Passive */}
-                        {passH > 0 && (
-                          <div
-                            style={{ height: `${passH}%` }}
-                            className="w-full bg-sky-400 rounded-xs transition-all"
-                          />
-                        )}
-                        {/* Idle */}
-                        {idleH > 0 && (
-                          <div
-                            style={{ height: `${idleH}%` }}
-                            className="w-full bg-amber-400 rounded-xs transition-all"
-                          />
-                        )}
-                        {/* Locked */}
-                        {lockH > 0 && (
-                          <div
-                            style={{ height: `${lockH}%` }}
-                            className="w-full bg-slate-300 rounded-xs transition-all"
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      <div className="h-1 w-full bg-slate-200 rounded-xs self-end" />
-                    )}
+                return (
+                  <div
+                    key={slot.hour}
+                    onMouseEnter={() => setHoveredSlot(slot)}
+                    onMouseLeave={() => setHoveredSlot(null)}
+                    className={`group relative flex flex-col items-center cursor-pointer transition-all duration-150 ${
+                      isHovered ? "scale-105 z-10" : ""
+                    }`}
+                  >
+                    {/* Vertical bar container */}
+                    <div className="relative flex flex-col justify-end w-full h-24 rounded-lg bg-slate-100/80 p-0.5 overflow-hidden ring-1 ring-slate-200/60 group-hover:ring-indigo-400 group-hover:shadow-sm">
+                      {hasWork ? (
+                        <div className="w-full flex flex-col-reverse justify-start h-full">
+                          {/* Active */}
+                          {activeH > 0 && (
+                            <div
+                              style={{ height: `${activeH}%` }}
+                              className="w-full bg-emerald-500 rounded-xs transition-all"
+                            />
+                          )}
+                          {/* Meeting */}
+                          {meetH > 0 && (
+                            <div
+                              style={{ height: `${meetH}%` }}
+                              className="w-full bg-purple-500 rounded-xs transition-all"
+                            />
+                          )}
+                          {/* Passive */}
+                          {passH > 0 && (
+                            <div
+                              style={{ height: `${passH}%` }}
+                              className="w-full bg-sky-400 rounded-xs transition-all"
+                            />
+                          )}
+                          {/* Idle */}
+                          {idleH > 0 && (
+                            <div
+                              style={{ height: `${idleH}%` }}
+                              className="w-full bg-amber-400 rounded-xs transition-all"
+                            />
+                          )}
+                          {/* Locked */}
+                          {lockH > 0 && (
+                            <div
+                              style={{ height: `${lockH}%` }}
+                              className="w-full bg-slate-300 rounded-xs transition-all"
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="h-1 w-full bg-slate-200 rounded-xs self-end" />
+                      )}
+                    </div>
+
+                    {/* Hour label with clear AM/PM designation */}
+                    <span
+                      title={`${formatHour(slot.hour_int)} (${slot.hour})`}
+                      className={`mt-1.5 text-[10px] font-mono transition-colors ${
+                        isHovered ? "font-bold text-indigo-600" : "text-slate-500"
+                      }`}
+                    >
+                      {formatHourShort(slot.hour_int)}
+                    </span>
                   </div>
-
-                  {/* Hour label */}
-                  <span className={`mt-1.5 text-[10px] font-mono transition-colors ${
-                    isHovered ? "font-bold text-indigo-600" : "text-slate-500"
-                  }`}>
-                    {slot.hour.slice(0, 2)}
-                  </span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           {/* Interactive Inspection Card when hovering */}
@@ -159,7 +206,7 @@ export function HourlyActivityTimeline({ timeline = [], selectedDate }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100/70 pb-2">
                 <span className="font-semibold text-indigo-950 flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-indigo-600" />
-                  Time Slot: {hoveredSlot.hour} – {String(hoveredSlot.hour_int + 1).padStart(2, "0")}:00
+                  Time Slot: {formatHour(hoveredSlot.hour_int)} – {formatHour((hoveredSlot.hour_int + 1) % 24)} ({hoveredSlot.hour} – {String((hoveredSlot.hour_int + 1) % 24).padStart(2, "0")}:00)
                 </span>
                 {hoveredSlot.top_app && (
                   <span className="font-medium text-indigo-700 bg-white px-2 py-0.5 rounded-full ring-1 ring-indigo-200 text-[11px] flex items-center gap-1">
