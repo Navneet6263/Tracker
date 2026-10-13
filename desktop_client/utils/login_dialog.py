@@ -58,24 +58,21 @@ def prompt_user_checkin() -> tuple[str, str]:
 
     root = tk.Tk()
     root.title("Sentinel Workforce Tracker — Employee Check-In")
-    width = 540
-    height = 510
-    root.geometry(f"{width}x{height}")
-    root.resizable(False, False)
     root.configure(bg="#0f172a")
 
-    # Center on screen
-    root.update_idletasks()
-    x = max(0, (root.winfo_screenwidth() // 2) - (width // 2))
-    y = max(0, (root.winfo_screenheight() // 2) - (height // 2))
-    root.geometry(f"{width}x{height}+{x}+{y}")
+    # True borderless fullscreen - covers 100% of the screen, removes cut (X) and minimize (-) buttons
+    root.attributes("-fullscreen", True)
     root.attributes("-topmost", True)
     root.lift()
     root.focus_force()
 
+    # Center container on screen
+    container = tk.Frame(root, bg="#0f172a")
+    container.place(relx=0.5, rely=0.5, anchor="center")
+
     # Main Card Container
-    card = tk.Frame(root, bg="#1e293b", padx=32, pady=26)
-    card.pack(fill="both", expand=True, padx=16, pady=16)
+    card = tk.Frame(container, bg="#1e293b", padx=36, pady=28, highlightthickness=1, highlightbackground="#334155")
+    card.pack()
 
     # Header Badge / Title
     header_frame = tk.Frame(card, bg="#1e293b")
@@ -129,6 +126,7 @@ def prompt_user_checkin() -> tuple[str, str]:
     name_entry = tk.Entry(
         card,
         font=("Segoe UI", 12),
+        width=45,
         bg="#0f172a",
         fg="#ffffff",
         insertbackground="#38bdf8",
@@ -155,6 +153,7 @@ def prompt_user_checkin() -> tuple[str, str]:
     email_entry = tk.Entry(
         card,
         font=("Segoe UI", 12),
+        width=45,
         bg="#0f172a",
         fg="#ffffff",
         insertbackground="#38bdf8",
@@ -207,8 +206,17 @@ def prompt_user_checkin() -> tuple[str, str]:
             parent=root,
         )
 
+    def keep_on_top(event=None):
+        try:
+            root.attributes("-topmost", True)
+            root.lift()
+        except Exception:
+            pass
+
     root.protocol("WM_DELETE_WINDOW", on_prevent_close)
     root.bind("<Escape>", lambda e: on_prevent_close())
+    root.bind("<Alt-F4>", lambda e: on_prevent_close())
+    root.bind("<FocusOut>", keep_on_top)
     name_entry.bind("<Return>", lambda e: email_entry.focus_set())
     email_entry.bind("<Return>", on_submit)
 
