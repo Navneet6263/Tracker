@@ -214,8 +214,20 @@ def employee_analytics(
     if user.role != "admin" and user.id != employee_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    emp = db.query(Employee).filter(Employee.id == employee_id).first()
-    tz_name = (emp.timezone_name if emp and emp.timezone_name else None) or TIMEZONE_NAME
+    shift = None
+    try:
+        shift = (
+            db.query(ShiftAssignment)
+            .filter(
+                ShiftAssignment.employee_id == employee_id,
+                ShiftAssignment.enabled == 1,
+            )
+            .first()
+        )
+    except Exception:
+        db.rollback()
+
+    tz_name = (shift.timezone_name if shift and shift.timezone_name else None) or TIMEZONE_NAME
     user_tz = _timezone_for_name(tz_name)
     now_local = datetime.now(timezone.utc).astimezone(user_tz)
     selected_date_str = None
@@ -306,18 +318,6 @@ def employee_analytics(
             )
             .order_by(ActivityInterval.started_at.asc())
             .all()
-        )
-    except Exception:
-        db.rollback()
-
-    try:
-        shift = (
-            db.query(ShiftAssignment)
-            .filter(
-                ShiftAssignment.employee_id == employee_id,
-                ShiftAssignment.enabled == 1,
-            )
-            .first()
         )
     except Exception:
         db.rollback()
